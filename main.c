@@ -6,14 +6,14 @@ int s[32];
 unsigned __int8 status = 0;
 char command[12];
 
-int strCase(char *key);
+int str_case(char *key);
 void input(int *arg, int *is_imm);
 int processor();
-void parityFlag(int num);
-void zeroFlag(int num);
-void signFlag(int num);
-void statusCheck(int num);
-void printBits (unsigned char num, int bits);
+void parity_flag(int num);
+void zero_flag(int num);
+void sign_flag(int num);
+void status_check(int num);
+void print_bits (unsigned char num, int bits);
 
 int main() {
     int is_exit = 0;
@@ -23,7 +23,7 @@ int main() {
     return 0;
 }
 
-int strCase(char *key) {
+int str_case(char *key) {
     if (strcmp(command, key) == 0)
         return 1;
     else
@@ -34,68 +34,67 @@ int processor() {
     int arg[3] = {0};
     int is_imm[3] = {1, 1, 1};
     input(arg, is_imm);
-    if (strCase("ADD")) {
+    if (str_case("ADD")) {
         s[arg[0]] = s[arg[1]] + s[arg[2]];
-        statusCheck(s[arg[0]]);
+        status_check(s[arg[0]]);
     }
-    if (strCase("MOV")) {
-        if (is_imm[1] == 0)
-            s[arg[0]] = s[arg[1]];
-        else
+    if (str_case("MOV")) {
+        if (is_imm[1])
             s[arg[0]] = arg[1];
+        else
+            s[arg[0]] = s[arg[1]];
     }
-    else if (strCase("OUTPUT")) {
+    else if (str_case("OUTPUT")) {
         printf("%d\n", s[0]);
     }
-    else if(strCase("DUMP_REGS")) {
+    else if(str_case("DUMP_REGS")) {
         for (int i = 0; i < 32; ++i) {
-            printf("S%02d    | Binary: ", i, s[i]);
-            printBits(s[i], 32);
-            printf(" | Decimal: %d\n", s[i]);
+            printf("   S%02d || Decimal: % -11d || Binary:", i, s[i]);
+            print_bits(s[i], 32);
         }
-        printf("Status | Binary: ",status);
-        printBits(status, 8);
-        printf("\t\t\t      | Decimal: %d\n", status);
+        printf("Status || Decimal: % -11d || Binary:",status);
+        print_bits(status, 8);
     }
-    else if (strCase("EXIT"))
+    else if (str_case("EXIT"))
         return 1;
     return 0;
 }
 
 void input(int *arg, int *is_imm) {
     scanf("%s", command);
-    unsigned char temp;
+    unsigned char tmp;
     int sign = 1;
     while (1) {
-        temp = getchar();
-        if (temp == ',') {
+        tmp = getchar();
+        if (tmp == ',') {
             arg++;
             is_imm++;
             sign = 1;
         }
-        else if (temp == ' ') {
+        else if (tmp == ' ') {
             continue;
         }
-        else if (temp == 'S') {
+        else if (tmp == 'S') {
             *is_imm = 0;
         }
-        else if (temp == '-')
+        else if (tmp == '-')
             sign = -1;
-        else if (temp != '\n') {
-            *arg = *arg * 10 + sign * (temp - '0');
+        else if (tmp != '\n') {
+            *arg = *arg * 10 + sign * (tmp - '0');
         }
         else
             break;
     }
 }
 
-void statusCheck(int num) {
-    parityFlag(num);
-    zeroFlag(num);
-    signFlag(num);
+void status_check(int num) {
+    status = 0;
+    parity_flag(num);
+    zero_flag(num);
+    sign_flag(num);
 }
 
-void parityFlag(int num) {
+void parity_flag(int num) {
     int odd = 0;
     for (int i = 0; i < 8; ++i) {
         if (num & 1)
@@ -104,25 +103,19 @@ void parityFlag(int num) {
     }
     if (odd)
         status |= 1;
-    else
-        status &= 0xFE;
 }
 
-void zeroFlag(int num) {
-    if (num)
-        status &= 0xFD;
-    else
+void zero_flag(int num) {
+    if (!num)
         status |= 2;
 }
 
-void signFlag(int num) {
-    if (num >= 0)
-        status &= 0xFB;
-    else
+void sign_flag(int num) {
+    if (num < 0)
         status |= 4;
 }
 
-void printBits(unsigned char num, int bits) {
+void print_bits(unsigned char num, int bits) {
     unsigned char mask = 1 << 7;
     for (int i = 0; i < bits; ++i) {
         if (i % 8 == 0)
@@ -130,4 +123,5 @@ void printBits(unsigned char num, int bits) {
         putchar(num & mask ? '1' : '0');
         mask >>= 1;
     }
+    putchar('\n');
 }
