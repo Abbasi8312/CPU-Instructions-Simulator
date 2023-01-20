@@ -62,6 +62,8 @@ int processor() {
 
 void input(int *arg, int *is_imm) {
     scanf("%s", command);
+    for (int i = 0; command[i]; ++i)
+        command[i] = toupper(command[i]);
     unsigned char tmp;
     int sign = 1;
     while (1) {
@@ -74,7 +76,7 @@ void input(int *arg, int *is_imm) {
         else if (tmp == ' ') {
             continue;
         }
-        else if (tmp == 'S') {
+        else if (tmp == 'S' || tmp == 's') {
             *is_imm = 0;
         }
         else if (tmp == '-')
