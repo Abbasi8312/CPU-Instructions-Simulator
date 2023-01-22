@@ -52,7 +52,7 @@ int processor(FILE *stream) {
         arg_type[i] = -1;
     }
     int is_eof = get_input(arg, stream);
-    printf("%s %d %d %d count:%d type:%d\n", command, arg[0], arg[1], arg[2], arg_count, arg_type[0]);
+    printf("%s %d %d %d count:%d \n", command, arg_type[0], arg_type[1], arg_type[2], arg_count);
     if (is_eof == 1) {
         return 1;
     }
@@ -120,13 +120,17 @@ int get_input(int *arg, FILE *stream) {
         while (tmp == ' ')
             tmp = getc(stream);
         if (tmp == '\n') {
-            arg_type[arg_count] = 2;
-            ++arg_count;
+            if (arg_count) {
+                arg_type[arg_count] = 2;
+                ++arg_count;
+            }
             return 0;
         }
         if (tmp == EOF) {
-            arg_type[arg_count] = 2;
-            ++arg_count;
+            if (arg_count) {
+                arg_type[arg_count] = 2;
+                ++arg_count;
+            }
             return 2;
         }
         if (tmp == 'S' || tmp == 's') {
@@ -151,31 +155,49 @@ int get_input(int *arg, FILE *stream) {
             arg_type[arg_count] = 2;
             ++arg_count;
             while (tmp != ',') {
-                tmp = getc(stream);
                 if (tmp == '\n')
                     return 0;
                 else if (tmp == EOF)
                     return 2;
+                tmp = getc(stream);
             }
             continue;
         }
-        if (tmp >= '0' && tmp < '9') {
+        if (isdigit(tmp)) {
             if (arg_type[arg_count] == -1) {
                 arg_type[arg_count] = 1;
             }
-            while (tmp >= '0' && tmp < '9') {
+            while (isdigit(tmp)) {
                 arg[arg_count] = arg[arg_count] * 10 + sign * (tmp - '0');
                 tmp = getc(stream);
             }
+            ++arg_count;
+            while (tmp == ' ')
+                tmp = getc(stream);
+            if (tmp == '\n')
+                return 0;
+            else if (tmp == EOF)
+                return 2;
+            else if (tmp != ',') {
+                arg_type[arg_count - 1] = 2;
+                while (tmp != ',') {
+                    if (tmp == '\n')
+                        return 0;
+                    else if (tmp == EOF)
+                        return 2;
+                    tmp = getc(stream);
+                }
+            }
+            continue;
         } else {
             arg_type[arg_count] = 2;
             ++arg_count;
             while (tmp != ',') {
-                tmp = getc(stream);
                 if (tmp == '\n')
                     return 0;
                 else if (tmp == EOF)
                     return 2;
+                tmp = getc(stream);
             }
             continue;
         }
@@ -270,16 +292,19 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
     int index;
     for (index = 0; index < arg_count && index < arg_need_count; ++index) {
         if ((arg_need_type[index] != arg_type[index] && arg_need_type[index] != -1) || arg_type[index] == 2) {
-            flag_invalid_input = 1;
-            break;
+            if (flag_invalid_input == 0) {
+                flag_invalid_input = 1;
+                printf("Error! | Line: \n");
+            }
+            printf("\targument %d is invalid\n", index + 1);
         }
     }
-    if (flag_invalid_input) {
-        printf("\tError! argument %d is invalid\n\t", index + 1);
-    }
     if (arg_need_count != arg_count) {
-        flag_invalid_input = 1;
-        printf("Error! %s instruction needs %d argument", command, arg_need_count);
+        if (flag_invalid_input == 0) {
+            flag_invalid_input = 1;
+            printf("Error! | Line: \n");
+        }
+        printf("\t%s instruction needs %d argument", command, arg_need_count);
         if (arg_need_count != 1) {
             putchar('s');
         }
@@ -287,10 +312,10 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
         if (arg_count != 1) {
             putchar('s');
         }
-        printf("\n\t");
+        printf("\n");
     }
     if (flag_invalid_input) {
-        printf("Correct format: %s ", command);
+        printf("\tCorrect format: %s ", command);
         for (int i = 0; i < arg_need_count; ++i) {
             if (i) {
                 printf(", ");
@@ -311,5 +336,5 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
 }
 
 void instruction_error() {
-    printf("\tUnknown instruction %s\n", command);
+    printf("Error! | Line: \n\tUnknown instruction %s\n", command);
 }
