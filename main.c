@@ -3,27 +3,37 @@
 #include <ctype.h>
 
 #define INT_MAX 2147483647
-#define INT_MIN -2147483648
+#define INT_MIN (-2147483648)
+#define ARG_MAX 3
 
 int s[32];
 unsigned __int8 status = 0;
 char command[12];
+int arg_type[ARG_MAX];
+int arg_count;
+int flag_invalid_input;
 
 int str_case(char *key);
 
-void input(int *arg, int *is_imm);
+int get_input(int *arg, FILE *stream);
 
-int processor();
+int processor(FILE *stream);
 
 void status_check(int result, char operator, int num_1, int num_2);
 
 void print_bits(unsigned int num, int bits);
 
+int arg_error(int arg_need_count, const int arg_need_type[]);
+
+void instruction_error();
+
 int main() {
+    FILE *stream = fopen("input.txt", "r");
     int is_exit = 0;
     while (!is_exit) {
-        is_exit = processor();
+        is_exit = processor(stream);
     }
+    fclose(stream);
     return 0;
 }
 
@@ -35,23 +45,46 @@ int str_case(char *key) {
     }
 }
 
-int processor() {
-    int arg[3] = {0};
-    int is_imm[3] = {1, 1, 1};
-    input(arg, is_imm);
+int processor(FILE *stream) {
+    flag_invalid_input = 0;
+    int arg[ARG_MAX] = {0};
+    for (int i = 0; i < ARG_MAX; ++i) {
+        arg_type[i] = -1;
+    }
+    int is_eof = get_input(arg, stream);
+    printf("%s %d %d %d count:%d type:%d\n", command, arg[0], arg[1], arg[2], arg_count, arg_type[0]);
+    if (is_eof == 1) {
+        return 1;
+    }
     if (str_case("ADD")) {
+        int imm_need[] = {0, 0, 0};
+        if (arg_error(3, imm_need)) {
+            return 0;
+        }
         s[arg[0]] = s[arg[1]] + s[arg[2]];
         status_check(s[arg[0]], '+', s[arg[1]], s[arg[2]]);
     }
-    if (str_case("MOV")) {
-        if (is_imm[1]) {
+    else if (str_case("MOV")) {
+        int imm_need[] = {0, -1};
+        if (arg_error(2, imm_need)) {
+            return 0;
+        }
+        if (arg_type[1]) {
             s[arg[0]] = arg[1];
         } else {
             s[arg[0]] = s[arg[1]];
         }
     } else if (str_case("OUTPUT")) {
+        int imm_need[] = {-1};
+        if (arg_error(0, imm_need)) {
+            return 0;
+        }
         printf("%d\n", s[0]);
     } else if (str_case("DUMP_REGS")) {
+        int imm_need[] = {-1};
+        if (arg_error(0, imm_need)) {
+            return 0;
+        }
         for (int i = 0; i < 32; ++i) {
             printf("   S%02d || Decimal: % -11d || Binary:", i, s[i]);
             print_bits(s[i], 32);
@@ -59,36 +92,111 @@ int processor() {
         printf("Status || Decimal: % -11d || Binary:", status);
         print_bits(status, 8);
     } else if (str_case("EXIT")) {
+        int imm_need[] = {-1};
+        if (arg_error(0, imm_need)) {
+            return 0;
+        }
+        return 1;
+    } else {
+        instruction_error();
+    }
+    if (is_eof == 2) {
         return 1;
     }
     return 0;
 }
 
-void input(int *arg, int *is_imm) {
-    scanf("%s", command);
+int get_input(int *arg, FILE *stream) {
+    arg_count = 0;
+    if (fscanf(stream, "%s", command) == EOF)
+        return 1;
     for (int i = 0; command[i]; ++i) {
         command[i] = toupper(command[i]);
     }
-    unsigned char tmp;
+    char tmp;
     int sign = 1;
-    while (1) {
-        tmp = getchar();
-        if (tmp == ',') {
-            arg++;
-            is_imm++;
-            sign = 1;
-        } else if (tmp == ' ') {
+    while (arg_count < ARG_MAX) {
+        tmp = getc(stream);
+        while (tmp == ' ')
+            tmp = getc(stream);
+        if (tmp == '\n') {
+            arg_type[arg_count] = 2;
+            ++arg_count;
+            return 0;
+        }
+        if (tmp == EOF) {
+            arg_type[arg_count] = 2;
+            ++arg_count;
+            return 2;
+        }
+        if (tmp == 'S' || tmp == 's') {
+            arg_type[arg_count] = 0;
+            tmp = getc(stream);
+        } else if (tmp != '-' && !isdigit(tmp)) {
+            arg_type[arg_count] = 2;
+            ++arg_count;
+            while (tmp != ',') {
+                tmp = getc(stream);
+                if (tmp == '\n')
+                    return 0;
+                else if (tmp == EOF)
+                    return 2;
+            }
             continue;
-        } else if (tmp == 'S' || tmp == 's') {
-            *is_imm = 0;
-        } else if (tmp == '-') {
+        }
+        if (tmp == '-') {
             sign = -1;
-        } else if (tmp != '\n') {
-            *arg = *arg * 10 + sign * (tmp - '0');
+            tmp = getc(stream);
+        } else if (!isdigit(tmp)) {
+            arg_type[arg_count] = 2;
+            ++arg_count;
+            while (tmp != ',') {
+                tmp = getc(stream);
+                if (tmp == '\n')
+                    return 0;
+                else if (tmp == EOF)
+                    return 2;
+            }
+            continue;
+        }
+        if (tmp >= '0' && tmp < '9') {
+            if (arg_type[arg_count] == -1) {
+                arg_type[arg_count] = 1;
+            }
+            while (tmp >= '0' && tmp < '9') {
+                arg[arg_count] = arg[arg_count] * 10 + sign * (tmp - '0');
+                tmp = getc(stream);
+            }
         } else {
-            break;
+            arg_type[arg_count] = 2;
+            ++arg_count;
+            while (tmp != ',') {
+                tmp = getc(stream);
+                if (tmp == '\n')
+                    return 0;
+                else if (tmp == EOF)
+                    return 2;
+            }
+            continue;
+        }
+        ++arg_count;
+        while (tmp != ',') {
+            if (tmp == '\n') {
+                return 0;
+            }
+            else if (tmp == EOF) {
+                return 2;
+            }
+            tmp = getc(stream);
         }
     }
+    while (tmp != '\n' && tmp != EOF) {
+        if (tmp == ',') {
+            ++arg_count;
+        }
+        tmp = getc(stream);
+    }
+    return 0;
 }
 
 void status_check(int result, char operator, int num_1, int num_2) {
@@ -156,4 +264,52 @@ void print_bits(unsigned int num, int bits) {
         mask >>= 1;
     }
     putchar('\n');
+}
+
+int arg_error(const int arg_need_count, const int arg_need_type[]) {
+    int index;
+    for (index = 0; index < arg_count && index < arg_need_count; ++index) {
+        if ((arg_need_type[index] != arg_type[index] && arg_need_type[index] != -1) || arg_type[index] == 2) {
+            flag_invalid_input = 1;
+            break;
+        }
+    }
+    if (flag_invalid_input) {
+        printf("\tError! argument %d is invalid\n\t", index + 1);
+    }
+    if (arg_need_count != arg_count) {
+        flag_invalid_input = 1;
+        printf("Error! %s instruction needs %d argument", command, arg_need_count);
+        if (arg_need_count != 1) {
+            putchar('s');
+        }
+        printf(" but you entered %d argument", arg_count);
+        if (arg_count != 1) {
+            putchar('s');
+        }
+        printf("\n\t");
+    }
+    if (flag_invalid_input) {
+        printf("Correct format: %s ", command);
+        for (int i = 0; i < arg_need_count; ++i) {
+            if (i) {
+                printf(", ");
+            }
+            if (arg_need_type[i] == 0) {
+                printf("S%c", 'a' + i);
+            } else if (arg_need_type[i] == 1){
+                printf("Imm");
+            } else {
+                printf("S%c/Imm", 'a' + i);
+            }
+        }
+        putchar('\n');
+        putchar('\n');
+        return 1;
+    }
+    return 0;
+}
+
+void instruction_error() {
+    printf("\tUnknown instruction %s\n", command);
 }
