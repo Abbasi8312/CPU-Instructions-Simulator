@@ -5,10 +5,11 @@
 #define INT_MAX 2147483647
 #define INT_MIN (-2147483648)
 #define ARG_MAX 3
+#define INSTRUCTION_MAX 12
 
 int s[32];
 unsigned __int8 status = 0;
-char command[12];
+char command[INSTRUCTION_MAX];
 int arg_type[ARG_MAX];
 int arg_count;
 int flag_invalid_input;
@@ -28,7 +29,7 @@ int arg_error(int arg_need_count, const int arg_need_type[]);
 void instruction_error();
 
 int main() {
-    FILE *stream = fopen("input.txt", "r");
+    FILE *stream = fopen("in.txt", "r");
     int is_exit = 0;
     while (!is_exit) {
         is_exit = processor(stream);
@@ -52,6 +53,11 @@ int processor(FILE *stream) {
         arg_type[i] = -1;
     }
     int is_eof = get_input(arg, stream);
+    for (int i = 1; i < INSTRUCTION_MAX && command[i] != 0; ++i)
+        if (command[i - 1] == '/' && command[i] == '/') {
+            command[i - 1] = 0;
+            break;
+        }
     printf("%s %d %d %d count:%d \n", command, arg_type[0], arg_type[1], arg_type[2], arg_count);
     if (is_eof == 1) {
         return 1;
@@ -63,8 +69,7 @@ int processor(FILE *stream) {
         }
         s[arg[0]] = s[arg[1]] + s[arg[2]];
         status_check(s[arg[0]], '+', s[arg[1]], s[arg[2]]);
-    }
-    else if (str_case("MOV")) {
+    } else if (str_case("MOV")) {
         int imm_need[] = {0, -1};
         if (arg_error(2, imm_need)) {
             return 0;
@@ -89,7 +94,7 @@ int processor(FILE *stream) {
             printf("   S%02d || Decimal: % -11d || Binary:", i, s[i]);
             print_bits(s[i], 32);
         }
-        printf("Status || Decimal: % -11d || Binary:", status);
+        printf("Status || Decimal: % -11d || Binary:\t\t\t    ", status);
         print_bits(status, 8);
     } else if (str_case("EXIT")) {
         int imm_need[] = {-1};
@@ -97,9 +102,10 @@ int processor(FILE *stream) {
             return 0;
         }
         return 1;
-    } else {
+    } else if (command[0] == 0)
+        return 0;
+    else
         instruction_error();
-    }
     if (is_eof == 2) {
         return 1;
     }
@@ -119,28 +125,60 @@ int get_input(int *arg, FILE *stream) {
         tmp = getc(stream);
         while (tmp == ' ')
             tmp = getc(stream);
+        if (tmp == '/') {
+            tmp = getc(stream);
+            if (tmp == '/') {
+                if (arg_count) {
+                    arg_type[arg_count] = 2;
+                    ++arg_count;
+                }
+                while (1) {
+                    tmp = getc(stream);
+                    if (tmp == '\n')
+                        return 0;
+                    else if (tmp == EOF)
+                        return 2;
+                }
+            } else {
+                arg_type[arg_count] = 2;
+                while (tmp == ' ')
+                    tmp = getc(stream);
+            }
+        }
         if (tmp == '\n') {
-            if (arg_count) {
+            if (arg_count || !arg_count && arg_type[0] == 2) {
                 arg_type[arg_count] = 2;
                 ++arg_count;
             }
             return 0;
-        }
-        if (tmp == EOF) {
-            if (arg_count) {
+        } else if (tmp == EOF) {
+            if (arg_count || !arg_count && arg_type[0] == 2) {
                 arg_type[arg_count] = 2;
                 ++arg_count;
             }
             return 2;
         }
         if (tmp == 'S' || tmp == 's') {
-            arg_type[arg_count] = 0;
+            if (arg_type[arg_count] == -1)
+                arg_type[arg_count] = 0;
             tmp = getc(stream);
         } else if (tmp != '-' && !isdigit(tmp)) {
             arg_type[arg_count] = 2;
             ++arg_count;
             while (tmp != ',') {
                 tmp = getc(stream);
+                if (tmp == '/') {
+                    tmp = getc(stream);
+                    if (tmp == '/') {
+                        while (1) {
+                            tmp = getc(stream);
+                            if (tmp == '\n')
+                                return 0;
+                            else if (tmp == EOF)
+                                return 2;
+                        }
+                    }
+                }
                 if (tmp == '\n')
                     return 0;
                 else if (tmp == EOF)
@@ -155,6 +193,18 @@ int get_input(int *arg, FILE *stream) {
             arg_type[arg_count] = 2;
             ++arg_count;
             while (tmp != ',') {
+                if (tmp == '/') {
+                    tmp = getc(stream);
+                    if (tmp == '/') {
+                        while (1) {
+                            tmp = getc(stream);
+                            if (tmp == '\n')
+                                return 0;
+                            else if (tmp == EOF)
+                                return 2;
+                        }
+                    }
+                }
                 if (tmp == '\n')
                     return 0;
                 else if (tmp == EOF)
@@ -179,6 +229,18 @@ int get_input(int *arg, FILE *stream) {
             else if (tmp == EOF)
                 return 2;
             else if (tmp != ',') {
+                if (tmp == '/') {
+                    tmp = getc(stream);
+                    if (tmp == '/') {
+                        while (1) {
+                            tmp = getc(stream);
+                            if (tmp == '\n')
+                                return 0;
+                            else if (tmp == EOF)
+                                return 2;
+                        }
+                    }
+                }
                 arg_type[arg_count - 1] = 2;
                 while (tmp != ',') {
                     if (tmp == '\n')
@@ -193,6 +255,18 @@ int get_input(int *arg, FILE *stream) {
             arg_type[arg_count] = 2;
             ++arg_count;
             while (tmp != ',') {
+                if (tmp == '/') {
+                    tmp = getc(stream);
+                    if (tmp == '/') {
+                        while (1) {
+                            tmp = getc(stream);
+                            if (tmp == '\n')
+                                return 0;
+                            else if (tmp == EOF)
+                                return 2;
+                        }
+                    }
+                }
                 if (tmp == '\n')
                     return 0;
                 else if (tmp == EOF)
@@ -200,16 +274,6 @@ int get_input(int *arg, FILE *stream) {
                 tmp = getc(stream);
             }
             continue;
-        }
-        ++arg_count;
-        while (tmp != ',') {
-            if (tmp == '\n') {
-                return 0;
-            }
-            else if (tmp == EOF) {
-                return 2;
-            }
-            tmp = getc(stream);
         }
     }
     while (tmp != '\n' && tmp != EOF) {
@@ -322,7 +386,7 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
             }
             if (arg_need_type[i] == 0) {
                 printf("S%c", 'a' + i);
-            } else if (arg_need_type[i] == 1){
+            } else if (arg_need_type[i] == 1) {
                 printf("Imm");
             } else {
                 printf("S%c/Imm", 'a' + i);
