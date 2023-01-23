@@ -12,7 +12,6 @@ unsigned __int8 status = 0;
 char command[INSTRUCTION_MAX];
 int arg_type[ARG_MAX];
 int arg_count;
-int flag_invalid_input;
 
 int str_case(char *key);
 
@@ -27,6 +26,11 @@ void print_bits(unsigned int num, int bits);
 int arg_error(int arg_need_count, const int arg_need_type[]);
 
 void instruction_error();
+
+int segmentation_error(const int arg[]);
+
+
+void overflow_warning();
 
 int main() {
     FILE *stream = fopen("in.txt", "r");
@@ -47,7 +51,6 @@ int str_case(char *key) {
 }
 
 int processor(FILE *stream) {
-    flag_invalid_input = 0;
     int arg[ARG_MAX] = {0};
     for (int i = 0; i < ARG_MAX; ++i) {
         arg_type[i] = -1;
@@ -64,16 +67,15 @@ int processor(FILE *stream) {
     }
     if (str_case("ADD")) {
         int imm_need[] = {0, 0, 0};
-        if (arg_error(3, imm_need)) {
+        if (arg_error(3, imm_need) || segmentation_error(arg))
             return 0;
-        }
-        s[arg[0]] = s[arg[1]] + s[arg[2]];
-        status_check(s[arg[0]], '+', s[arg[1]], s[arg[2]]);
+        int tmp = s[arg[1]] + s[arg[2]];
+        status_check(tmp, '+', s[arg[1]], s[arg[2]]);
+        s[arg[0]] = tmp;
     } else if (str_case("MOV")) {
         int imm_need[] = {0, -1};
-        if (arg_error(2, imm_need)) {
+        if (arg_error(2, imm_need) || segmentation_error(arg))
             return 0;
-        }
         if (arg_type[1]) {
             s[arg[0]] = arg[1];
         } else {
@@ -214,13 +216,18 @@ int get_input(int *arg, FILE *stream) {
             continue;
         }
         if (isdigit(tmp)) {
+            int is_overflow = 0;
             if (arg_type[arg_count] == -1) {
                 arg_type[arg_count] = 1;
             }
             while (isdigit(tmp)) {
                 arg[arg_count] = arg[arg_count] * 10 + sign * (tmp - '0');
                 tmp = getc(stream);
+                if (arg[arg_count] >= 0 && sign < 0 || arg[arg_count] < 0 && sign > 0)
+                    is_overflow = 1;
             }
+            if (is_overflow)
+                overflow_warning();
             ++arg_count;
             while (tmp == ' ')
                 tmp = getc(stream);
@@ -337,6 +344,7 @@ void status_check(int result, char operator, int num_1, int num_2) {
     }
     if (overflow_flag) {
         status |= 32;
+        overflow_warning();
     }
 }
 
@@ -353,20 +361,20 @@ void print_bits(unsigned int num, int bits) {
 }
 
 int arg_error(const int arg_need_count, const int arg_need_type[]) {
-    int index;
+    int index, flag_invalid_input = 0;
     for (index = 0; index < arg_count && index < arg_need_count; ++index) {
         if ((arg_need_type[index] != arg_type[index] && arg_need_type[index] != -1) || arg_type[index] == 2) {
             if (flag_invalid_input == 0) {
                 flag_invalid_input = 1;
-                printf("Error! | Line: \n");
+                printf("Syntax Error! | Line: \n");
             }
-            printf("\targument %d is invalid\n", index + 1);
+            printf("\tArgument %d is invalid\n", index + 1);
         }
     }
     if (arg_need_count != arg_count) {
         if (flag_invalid_input == 0) {
             flag_invalid_input = 1;
-            printf("Error! | Line: \n");
+            printf("Syntax Error! | Line: \n");
         }
         printf("\t%s instruction needs %d argument", command, arg_need_count);
         if (arg_need_count != 1) {
@@ -400,5 +408,25 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
 }
 
 void instruction_error() {
-    printf("Error! | Line: \n\tUnknown instruction %s\n", command);
+    printf("Syntax Error! | Line: \n\tUnknown instruction %s\n", command);
+}
+
+int segmentation_error(const int *arg) {
+    int index, flag_invalid_input = 0;
+    for (index = 0; index < arg_count; ++index) {
+        if (arg_type[index] == 0 && (arg[index] < 0 || arg[index] >= 32)) {
+            if (flag_invalid_input == 0) {
+                flag_invalid_input = 1;
+                printf("Segmentation error! | Line: \n");
+            }
+            printf("\tArgument %d is invalid\n", index + 1);
+        }
+    }
+    if (flag_invalid_input == 1)
+        return 1;
+    return 0;
+}
+
+void overflow_warning() {
+    printf("Overflow warning! | Line: \n");
 }
