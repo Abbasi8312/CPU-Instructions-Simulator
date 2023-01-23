@@ -25,15 +25,16 @@ void print_bits(unsigned int num, int bits);
 
 int arg_error(int arg_need_count, const int arg_need_type[]);
 
-void instruction_error();
-
 int segmentation_error(const int arg[]);
 
-
-void overflow_warning();
+void print_overflow_warning();
 
 int main() {
     FILE *stream = fopen("in.txt", "r");
+    if (stream == NULL) {
+        fprintf(stderr, "Error!\n\tCouldn't find in.txt\n");
+        return 0;
+    }
     int is_exit = 0;
     while (!is_exit) {
         is_exit = processor(stream);
@@ -61,8 +62,8 @@ int processor(FILE *stream) {
             command[i - 1] = 0;
             break;
         }
-    printf("%s %d %d %d count:%d \n", command, arg_type[0], arg_type[1], arg_type[2], arg_count);
     if (is_eof == 1) {
+        printf("Reached the end of file!");
         return 1;
     }
     if (str_case("ADD")) {
@@ -107,8 +108,9 @@ int processor(FILE *stream) {
     } else if (command[0] == 0)
         return 0;
     else
-        instruction_error();
+        printf("Syntax Error! | Line: \n\tUnknown instruction %s\n", command);
     if (is_eof == 2) {
+        printf("Reached the end of file!");
         return 1;
     }
     return 0;
@@ -227,7 +229,7 @@ int get_input(int *arg, FILE *stream) {
                     is_overflow = 1;
             }
             if (is_overflow)
-                overflow_warning();
+                print_overflow_warning();
             ++arg_count;
             while (tmp == ' ')
                 tmp = getc(stream);
@@ -344,7 +346,7 @@ void status_check(int result, char operator, int num_1, int num_2) {
     }
     if (overflow_flag) {
         status |= 32;
-        overflow_warning();
+        print_overflow_warning();
     }
 }
 
@@ -407,10 +409,6 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
     return 0;
 }
 
-void instruction_error() {
-    printf("Syntax Error! | Line: \n\tUnknown instruction %s\n", command);
-}
-
 int segmentation_error(const int *arg) {
     int index, flag_invalid_input = 0;
     for (index = 0; index < arg_count; ++index) {
@@ -427,6 +425,6 @@ int segmentation_error(const int *arg) {
     return 0;
 }
 
-void overflow_warning() {
+void print_overflow_warning() {
     printf("Overflow warning! | Line: \n");
 }
