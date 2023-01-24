@@ -1,9 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
 
-#define INT_MAX 2147483647
-#define INT_MIN (-2147483648)
 #define ARG_MAX 3
 #define INSTRUCTION_MAX 12
 
@@ -12,6 +11,11 @@ unsigned __int8 status = 0;
 char command[INSTRUCTION_MAX];
 int arg_type[ARG_MAX];
 int arg_count;
+long *line_place;
+unsigned int *line_repeat;
+unsigned int current_line = 0;
+char is_loop = 0;
+char is_overflow = 0;
 
 int str_case(char *key);
 
@@ -33,8 +37,31 @@ int main() {
     FILE *stream = fopen("in.txt", "r");
     if (stream == NULL) {
         fprintf(stderr, "Error!\n\tCouldn't find in.txt\n");
-        return 0;
+        return 1;
     }
+    current_line = 1;
+    char tmp;
+    do {
+        tmp = getc(stream);
+        if (tmp == '\n') {
+            ++current_line;
+        }
+    } while (tmp != EOF);
+    rewind(stream);
+    line_place = (long *) malloc((current_line + 1) * sizeof(long));
+    line_repeat = (unsigned int *) calloc(current_line, sizeof(unsigned int));
+    line_place[0] = 0;
+    current_line = 1;
+    do {
+        tmp = getc(stream);
+        if (tmp == '\n') {
+            line_place[current_line] = ftell(stream);
+            ++current_line;
+        }
+    } while (tmp != EOF);
+    line_place[current_line] = ftell(stream);
+    rewind(stream);
+    current_line = 0;
     int is_exit = 0;
     while (!is_exit) {
         is_exit = processor(stream);
@@ -57,6 +84,14 @@ int processor(FILE *stream) {
         arg_type[i] = -1;
     }
     int is_eof = get_input(arg, stream);
+    while (ftell(stream) != line_place[current_line]) {
+        ++line_repeat[current_line];
+        ++current_line;
+    }
+    if (is_overflow) {
+        print_overflow_warning();
+        is_overflow = 0;
+    }
     for (int i = 1; i < INSTRUCTION_MAX && command[i] != 0; ++i)
         if (command[i - 1] == '/' && command[i] == '/') {
             command[i - 1] = 0;
@@ -65,13 +100,19 @@ int processor(FILE *stream) {
     if (is_eof == 1) {
         printf("Reached the end of file!");
         return 1;
-    }
-    if (str_case("ADD")) {
+    } else if (str_case("ADD")) {
         int imm_need[] = {0, 0, 0};
         if (arg_error(3, imm_need) || segmentation_error(arg))
             return 0;
         int tmp = s[arg[1]] + s[arg[2]];
         status_check(tmp, '+', s[arg[1]], s[arg[2]]);
+        s[arg[0]] = tmp;
+    } else if (str_case("SUB")) {
+        int imm_need[] = {0, 0, 0};
+        if (arg_error(3, imm_need) || segmentation_error(arg))
+            return 0;
+        int tmp = s[arg[1]] - s[arg[2]];
+        status_check(tmp, '-', s[arg[1]], s[arg[2]]);
         s[arg[0]] = tmp;
     } else if (str_case("MOV")) {
         int imm_need[] = {0, -1};
@@ -99,16 +140,41 @@ int processor(FILE *stream) {
         }
         printf("Status || Decimal: % -11d || Binary:\t\t\t    ", status);
         print_bits(status, 8);
+    } else if (str_case("JMP")) {
+        int imm_need[] = {1};
+        if (arg_error(1, imm_need) || segmentation_error(arg))
+            return 0;
+        if (line_repeat[arg[0] - 1] >= 1 && is_loop == 0) {
+            printf("Warning! | Line: %d\n\tEnter endless loop? (Y/N)\n", current_line);
+            char tmp;
+            while (1) {
+                tmp = getchar();
+                if (tmp == 'Y' || tmp == 'y') {
+                    is_loop = 1;
+                    break;
+                } else if (tmp == 'n' || tmp == 'N') {
+                    return 0;
+                } else {
+                    printf("Invalid Input! Enter Y/N\n");
+                }
+                while (getchar() != '\n');
+            }
+        }
+        current_line = arg[0] - 1;
+        fseek(stream, line_place[current_line], SEEK_SET);
+        return 0;
     } else if (str_case("EXIT")) {
         int imm_need[] = {-1};
         if (arg_error(0, imm_need)) {
             return 0;
         }
         return 1;
-    } else if (command[0] == 0)
+    } else if (command[0] == 0) {
         return 0;
-    else
-        printf("Syntax Error! | Line: \n\tUnknown instruction %s\n", command);
+    } else {
+        printf("Syntax Error! | Line: %d\n\tUnknown instruction %s\n", current_line, command);
+    }
+
     if (is_eof == 2) {
         printf("Reached the end of file!");
         return 1;
@@ -123,7 +189,7 @@ int get_input(int *arg, FILE *stream) {
     for (int i = 0; command[i]; ++i) {
         command[i] = toupper(command[i]);
     }
-    char tmp;
+    int tmp;
     int sign = 1;
     while (arg_count < ARG_MAX) {
         tmp = getc(stream);
@@ -218,18 +284,20 @@ int get_input(int *arg, FILE *stream) {
             continue;
         }
         if (isdigit(tmp)) {
-            int is_overflow = 0;
+            int index = 0;
+            char num[20] = {0};
             if (arg_type[arg_count] == -1) {
                 arg_type[arg_count] = 1;
             }
             while (isdigit(tmp)) {
+                num[index] = tmp;
                 arg[arg_count] = arg[arg_count] * 10 + sign * (tmp - '0');
                 tmp = getc(stream);
-                if (arg[arg_count] >= 0 && sign < 0 || arg[arg_count] < 0 && sign > 0)
-                    is_overflow = 1;
+                ++index;
             }
-            if (is_overflow)
-                print_overflow_warning();
+            if (sign > 0 && strcmp(num, "2147483648") == 0 || index == 10 && strcmp(num, "2147483648") > 0 ||
+                index > 10)
+                is_overflow = 1;
             ++arg_count;
             while (tmp == ' ')
                 tmp = getc(stream);
@@ -368,7 +436,7 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
         if ((arg_need_type[index] != arg_type[index] && arg_need_type[index] != -1) || arg_type[index] == 2) {
             if (flag_invalid_input == 0) {
                 flag_invalid_input = 1;
-                printf("Syntax Error! | Line: \n");
+                printf("Syntax Error! | Line: %d\n", current_line);
             }
             printf("\tArgument %d is invalid\n", index + 1);
         }
@@ -376,7 +444,7 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
     if (arg_need_count != arg_count) {
         if (flag_invalid_input == 0) {
             flag_invalid_input = 1;
-            printf("Syntax Error! | Line: \n");
+            printf("Syntax Error! | Line: %d\n", current_line);
         }
         printf("\t%s instruction needs %d argument", command, arg_need_count);
         if (arg_need_count != 1) {
@@ -403,7 +471,6 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
             }
         }
         putchar('\n');
-        putchar('\n');
         return 1;
     }
     return 0;
@@ -415,7 +482,7 @@ int segmentation_error(const int *arg) {
         if (arg_type[index] == 0 && (arg[index] < 0 || arg[index] >= 32)) {
             if (flag_invalid_input == 0) {
                 flag_invalid_input = 1;
-                printf("Segmentation error! | Line: \n");
+                printf("Segmentation error! | Line: %d\n", current_line);
             }
             printf("\tArgument %d is invalid\n", index + 1);
         }
@@ -426,5 +493,5 @@ int segmentation_error(const int *arg) {
 }
 
 void print_overflow_warning() {
-    printf("Overflow warning! | Line: \n");
+    printf("Overflow warning! | Line: %d\n", current_line);
 }
