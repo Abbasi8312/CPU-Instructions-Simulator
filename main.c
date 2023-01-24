@@ -114,6 +114,56 @@ int processor(FILE *stream) {
         int tmp = s[arg[1]] - s[arg[2]];
         status_check(tmp, '-', s[arg[1]], s[arg[2]]);
         s[arg[0]] = tmp;
+    } else if (str_case("AND")) {
+        int imm_need[] = {0, 0, 0};
+        if (arg_error(3, imm_need) || segmentation_error(arg))
+            return 0;
+        s[arg[0]] = s[arg[1]] & s[arg[2]];
+        status_check(s[arg[0]], '&', s[arg[1]], s[arg[2]]);
+    } else if (str_case("XOR")) {
+        int imm_need[] = {0, 0, 0};
+        if (arg_error(3, imm_need) || segmentation_error(arg))
+            return 0;
+        s[arg[0]] = s[arg[1]] ^ s[arg[2]];
+        status_check(s[arg[0]], '^', s[arg[1]], s[arg[2]]);
+    } else if (str_case("OR")) {
+        int imm_need[] = {0, 0, 0};
+        if (arg_error(3, imm_need) || segmentation_error(arg))
+            return 0;
+        s[arg[0]] = s[arg[1]] | s[arg[2]];
+        status_check(s[arg[0]], '|', s[arg[1]], s[arg[2]]);
+    } else if (str_case("ADDI")) {
+        int imm_need[] = {0, 0, 1};
+        if (arg_error(3, imm_need) || segmentation_error(arg))
+            return 0;
+        int tmp = s[arg[1]] + arg[2];
+        status_check(tmp, '+', s[arg[1]], arg[2]);
+        s[arg[0]] = tmp;
+    } else if (str_case("SUBI")) {
+        int imm_need[] = {0, 0, 1};
+        if (arg_error(3, imm_need) || segmentation_error(arg))
+            return 0;
+        int tmp = s[arg[1]] - arg[2];
+        status_check(tmp, '-', s[arg[1]], arg[2]);
+        s[arg[0]] = tmp;
+    } else if (str_case("ANDI")) {
+        int imm_need[] = {0, 0, 1};
+        if (arg_error(3, imm_need) || segmentation_error(arg))
+            return 0;
+        s[arg[0]] = s[arg[1]] & arg[2];
+        status_check(s[arg[0]], '&', s[arg[1]], arg[2]);
+    } else if (str_case("XORI")) {
+        int imm_need[] = {0, 0, 1};
+        if (arg_error(3, imm_need) || segmentation_error(arg))
+            return 0;
+        s[arg[0]] = s[arg[1]] ^ arg[2];
+        status_check(s[arg[0]], '^', s[arg[1]], arg[2]);
+    } else if (str_case("ORI")) {
+        int imm_need[] = {0, 0, 1};
+        if (arg_error(3, imm_need) || segmentation_error(arg))
+            return 0;
+        s[arg[0]] = s[arg[1]] | arg[2];
+        status_check(s[arg[0]], '|', s[arg[1]], arg[2]);
     } else if (str_case("MOV")) {
         int imm_need[] = {0, -1};
         if (arg_error(2, imm_need) || segmentation_error(arg))
@@ -123,12 +173,13 @@ int processor(FILE *stream) {
         } else {
             s[arg[0]] = s[arg[1]];
         }
-    } else if (str_case("OUTPUT")) {
-        int imm_need[] = {-1};
-        if (arg_error(0, imm_need)) {
+    } else if (str_case("SWP")) {
+        int imm_need[] = {0, 0};
+        if (arg_error(2, imm_need) || segmentation_error(arg))
             return 0;
-        }
-        printf("%d\n", s[0]);
+        int tmp = s[arg[0]];
+        s[arg[0]] = s[arg[1]];
+        s[arg[1]] = tmp;
     } else if (str_case("DUMP_REGS")) {
         int imm_need[] = {-1};
         if (arg_error(0, imm_need)) {
@@ -140,6 +191,34 @@ int processor(FILE *stream) {
         }
         printf("Status || Decimal: % -11d || Binary:\t\t\t    ", status);
         print_bits(status, 8);
+    } else if (str_case("INPUT")) {
+        int imm_need[] = {-1};
+        if (arg_error(0, imm_need)) {
+            return 0;
+        }
+        while (1) {
+            printf("S0:\n");
+            scanf("%d", s);
+            char tmp;
+            do {
+                tmp = getchar();
+            } while (tmp == ' ' || tmp == '\t');
+            if (tmp == '\n')
+                break;
+            else {
+                printf("Invalid input!\t");
+                while (getchar() != '\n');
+                continue;
+            }
+        }
+
+
+    } else if (str_case("OUTPUT")) {
+        int imm_need[] = {-1};
+        if (arg_error(0, imm_need)) {
+            return 0;
+        }
+        printf("%d\n", s[0]);
     } else if (str_case("JMP")) {
         int imm_need[] = {1};
         if (arg_error(1, imm_need) || segmentation_error(arg))
