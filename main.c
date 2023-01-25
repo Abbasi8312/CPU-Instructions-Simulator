@@ -19,7 +19,7 @@ FILE *output_stream = NULL;
 
 int str_case(char *key);
 
-int get_input(int *arg, FILE *stream);
+int get_input_file(int *arg, FILE *input_stream);
 
 int processor(FILE *input_stream);
 
@@ -142,13 +142,10 @@ int processor(FILE *input_stream) {
     for (int i = 0; i < ARG_MAX; ++i) {
         arg_type[i] = -1;
     }
-    int is_eof = get_input(arg, input_stream);
+    is_overflow = 0;
+    int is_eof = get_input_file(arg, input_stream);
     while (ftell(input_stream) != line_place[current_line]) {
         ++current_line;
-    }
-    if (is_overflow) {
-        print_overflow_warning();
-        is_overflow = 0;
     }
     for (int i = 1; i < INSTRUCTION_MAX_CHARACTERS && command[i] != 0; ++i)
         if (command[i - 1] == '/' && command[i] == '/') {
@@ -316,7 +313,7 @@ int processor(FILE *input_stream) {
         }
         while (1) {
             s[0] = 0;
-            printf("S0:\n");
+            printf("Enter a number:\n");
             char tmp, sign = 1;
             do {
                 tmp = getchar();
@@ -346,7 +343,8 @@ int processor(FILE *input_stream) {
                     break;
             }
             printf("Invalid input!\n");
-            while (getchar() != '\n');
+            while (tmp != '\n')
+                tmp = getchar();
         }
     } else if (str_case("OUTPUT")) {
         int imm_need[] = {-1};
@@ -359,7 +357,7 @@ int processor(FILE *input_stream) {
         if (arg_error(1, imm_need) || segmentation_error(arg))
             return 0;
         if (arg[0] > max_line || arg[0] <= 0) {
-            printf("Out of range error! | Line: %d\n\tLine %d doesn't exist\n", current_line, arg[0]);
+            printf("Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line, arg[0]);
             return 0;
         }
         current_line = arg[0] - 1;
@@ -373,12 +371,29 @@ int processor(FILE *input_stream) {
         status_check(tmp, '*', s[arg[0]], s[arg[1]]);
         s[arg[0]] = tmp >> 32;
         s[arg[1]] = tmp;
+    } else if (str_case("DIV")) {
+        int imm_need[] = {0, 0};
+        if (arg_error(2, imm_need) || segmentation_error(arg))
+            return 0;
+        if (s[arg[1]] == 0) {
+            printf("Error! Division by zero\n");
+            return 0;
+        } else if (s[arg[0]] == -2147483648 && s[arg[1]] == -1) {
+            s[arg[1]] = 0;
+            s[arg[0]] = -2147483648;
+            print_overflow_warning();
+        } else {
+            int tmp = s[arg[0]] / s[arg[1]];
+            status_check(tmp, '/', s[arg[0]], s[arg[1]]);
+            s[arg[1]] = s[arg[0]] % s[arg[1]];
+            s[arg[0]] = tmp;
+        }
     } else if (str_case("SKIE")) {
         int imm_need[] = {0, 0};
         if (arg_error(2, imm_need) || segmentation_error(arg))
             return 0;
         else if (current_line == max_line) {
-            printf("Out of range error! | Line: %d\n\tLine %d doesn't exist\n", current_line, max_line + 1);
+            printf("Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line, max_line + 1);
         } else if (s[arg[0]] == s[arg[1]]) {
             ++current_line;
             fseek(input_stream, line_place[current_line], SEEK_SET);
@@ -392,8 +407,11 @@ int processor(FILE *input_stream) {
     } else if (command[0] == 0) {
         return 0;
     } else {
-        printf("Syntax error! | Line: %d\n\tUnknown instruction %s\n", current_line, command);
+        printf("Line:%-3d| Syntax error!\n\tUnknown instruction %s\n", current_line, command);
+        return 0;
     }
+    if (is_overflow)
+        print_overflow_warning();
     if (is_eof == 2) {
         printf("Reached the end of file!\n");
         return -1;
@@ -401,9 +419,9 @@ int processor(FILE *input_stream) {
     return 0;
 }
 
-int get_input(int *arg, FILE *stream) {
+int get_input_file(int *arg, FILE *input_stream) {
     arg_count = 0;
-    if (fscanf(stream, "%s", command) == EOF)
+    if (fscanf(input_stream, "%s", command) == EOF)
         return 1;
     for (int i = 0; command[i]; ++i) {
         command[i] = toupper(command[i]);
@@ -411,18 +429,18 @@ int get_input(int *arg, FILE *stream) {
     int tmp;
     int sign = 1;
     while (arg_count < ARG_MAX) {
-        tmp = getc(stream);
+        tmp = getc(input_stream);
         while (tmp == ' ' || tmp == '\t')
-            tmp = getc(stream);
+            tmp = getc(input_stream);
         if (tmp == '/') {
-            tmp = getc(stream);
+            tmp = getc(input_stream);
             if (tmp == '/') {
                 if (arg_count) {
                     arg_type[arg_count] = 2;
                     ++arg_count;
                 }
                 while (1) {
-                    tmp = getc(stream);
+                    tmp = getc(input_stream);
                     if (tmp == '\n')
                         return 0;
                     else if (tmp == EOF)
@@ -431,7 +449,7 @@ int get_input(int *arg, FILE *stream) {
             } else {
                 arg_type[arg_count] = 2;
                 while (tmp == ' ')
-                    tmp = getc(stream);
+                    tmp = getc(input_stream);
             }
         }
         if (tmp == '\n') {
@@ -450,17 +468,17 @@ int get_input(int *arg, FILE *stream) {
         if (tmp == 'S' || tmp == 's') {
             if (arg_type[arg_count] == -1)
                 arg_type[arg_count] = 0;
-            tmp = getc(stream);
-        } else if (tmp != '-' && !isdigit(tmp)) {
+            tmp = getc(input_stream);
+        } else if (tmp != '-' && tmp != '+' && !isdigit(tmp)) {
             arg_type[arg_count] = 2;
             ++arg_count;
             while (tmp != ',') {
-                tmp = getc(stream);
+                tmp = getc(input_stream);
                 if (tmp == '/') {
-                    tmp = getc(stream);
+                    tmp = getc(input_stream);
                     if (tmp == '/') {
                         while (1) {
-                            tmp = getc(stream);
+                            tmp = getc(input_stream);
                             if (tmp == '\n')
                                 return 0;
                             else if (tmp == EOF)
@@ -477,16 +495,18 @@ int get_input(int *arg, FILE *stream) {
         }
         if (tmp == '-') {
             sign = -1;
-            tmp = getc(stream);
+            tmp = getc(input_stream);
+        } else if (tmp == '+') {
+            tmp = getc(input_stream);
         } else if (!isdigit(tmp)) {
             arg_type[arg_count] = 2;
             ++arg_count;
             while (tmp != ',') {
                 if (tmp == '/') {
-                    tmp = getc(stream);
+                    tmp = getc(input_stream);
                     if (tmp == '/') {
                         while (1) {
-                            tmp = getc(stream);
+                            tmp = getc(input_stream);
                             if (tmp == '\n')
                                 return 0;
                             else if (tmp == EOF)
@@ -498,7 +518,7 @@ int get_input(int *arg, FILE *stream) {
                     return 0;
                 else if (tmp == EOF)
                     return 2;
-                tmp = getc(stream);
+                tmp = getc(input_stream);
             }
             continue;
         }
@@ -512,7 +532,7 @@ int get_input(int *arg, FILE *stream) {
                 if (index < 11)
                     num[index] = tmp;
                 arg[arg_count] = arg[arg_count] * 10 + sign * (tmp - '0');
-                tmp = getc(stream);
+                tmp = getc(input_stream);
                 ++index;
             }
             if (sign > 0 && strcmp(num, "2147483648") == 0 || index == 10 && strcmp(num, "2147483648") > 0 ||
@@ -520,17 +540,17 @@ int get_input(int *arg, FILE *stream) {
                 is_overflow = 1;
             ++arg_count;
             while (tmp == ' ' || tmp == '\t')
-                tmp = getc(stream);
+                tmp = getc(input_stream);
             if (tmp == '\n')
                 return 0;
             else if (tmp == EOF)
                 return 2;
             else if (tmp != ',') {
                 if (tmp == '/') {
-                    tmp = getc(stream);
+                    tmp = getc(input_stream);
                     if (tmp == '/') {
                         while (1) {
-                            tmp = getc(stream);
+                            tmp = getc(input_stream);
                             if (tmp == '\n')
                                 return 0;
                             else if (tmp == EOF)
@@ -544,7 +564,7 @@ int get_input(int *arg, FILE *stream) {
                         return 0;
                     else if (tmp == EOF)
                         return 2;
-                    tmp = getc(stream);
+                    tmp = getc(input_stream);
                 }
             }
             continue;
@@ -553,10 +573,10 @@ int get_input(int *arg, FILE *stream) {
             ++arg_count;
             while (tmp != ',') {
                 if (tmp == '/') {
-                    tmp = getc(stream);
+                    tmp = getc(input_stream);
                     if (tmp == '/') {
                         while (1) {
-                            tmp = getc(stream);
+                            tmp = getc(input_stream);
                             if (tmp == '\n')
                                 return 0;
                             else if (tmp == EOF)
@@ -568,7 +588,7 @@ int get_input(int *arg, FILE *stream) {
                     return 0;
                 else if (tmp == EOF)
                     return 2;
-                tmp = getc(stream);
+                tmp = getc(input_stream);
             }
             continue;
         }
@@ -577,14 +597,14 @@ int get_input(int *arg, FILE *stream) {
         if (tmp == ',') {
             ++arg_count;
         }
-        tmp = getc(stream);
+        tmp = getc(input_stream);
     }
     return 0;
 }
 
 void status_check(long long int result, char operator, int num_1, int num_2) {
     status = 0;
-    int bit_count = operator == '*' ? 64: 32;
+    int bit_count = operator == '*' ? 64 : 32;
     //Parity flag
     int odd = 0;
     for (int i = 0; i < bit_count; ++i) {
@@ -619,11 +639,6 @@ void status_check(long long int result, char operator, int num_1, int num_2) {
                 overflow_flag = 1;
             }
             break;
-        case '/':
-            if (num_2 == -1 && num_1 == INT_MIN || num_1 == -1 && num_2 == INT_MIN) {
-                overflow_flag = 1;
-            }
-            break;
     }
     if (overflow_flag) {
         status |= 32;
@@ -649,7 +664,7 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
         if ((arg_need_type[index] != arg_type[index] && arg_need_type[index] != -1) || arg_type[index] == 2) {
             if (flag_invalid_input == 0) {
                 flag_invalid_input = 1;
-                printf("Syntax error! | Line: %d\n", current_line);
+                printf("Line:%-3d| Syntax error!\n", current_line);
             }
             printf("\tArgument %d is invalid\n", index + 1);
         }
@@ -657,7 +672,7 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
     if (arg_need_count != arg_count) {
         if (flag_invalid_input == 0) {
             flag_invalid_input = 1;
-            printf("Syntax error! | Line: %d\n", current_line);
+            printf("Line:%-3d| Syntax error!\n", current_line);
         }
         printf("\t%s instruction needs %d argument", command, arg_need_count);
         if (arg_need_count != 1) {
@@ -695,7 +710,7 @@ int segmentation_error(const int *arg) {
         if (arg_type[index] == 0 && (arg[index] < 0 || arg[index] >= 32)) {
             if (flag_invalid_input == 0) {
                 flag_invalid_input = 1;
-                printf("Segmentation error! | Line: %d\n", current_line);
+                printf("Line:%-3d| Segmentation error!\n", current_line);
             }
             printf("\tArgument %d is invalid\n", index + 1);
         }
@@ -706,5 +721,5 @@ int segmentation_error(const int *arg) {
 }
 
 void print_overflow_warning() {
-    printf("Overflow warning! | Line: %d\n", current_line);
+    printf("Line:%-3d| Overflow warning!\n", current_line);
 }
