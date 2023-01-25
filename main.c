@@ -3,25 +3,26 @@
 #include <ctype.h>
 #include <stdlib.h>
 
-#define ARG_MAX 3
+#define ARG_MAX_COUNT 3
 #define INSTRUCTION_MAX_CHARACTERS 12
 
+FILE *output_stream = NULL;
+long *line_place = NULL;
+int current_line, max_line;
 int s[32];
 unsigned __int8 status = 0;
 char command[INSTRUCTION_MAX_CHARACTERS];
-int arg_type[ARG_MAX];
+int arg_type[ARG_MAX_COUNT];
 int arg_count;
-long *line_place = NULL;
-int current_line;
-int max_line;
 char is_overflow = 0;
-FILE *output_stream = NULL;
-
-int str_case(char *key);
-
-int get_input_file(int *arg, FILE *input_stream);
+int *stack;
+int stack_index = -1, stack_max = 10;
 
 int processor(FILE *input_stream);
+
+int get_input_from_file(int *arg, FILE *input_stream);
+
+int str_case(char *key);
 
 void status_check(long long int result, char operator, int num_1, int num_2);
 
@@ -35,6 +36,7 @@ void print_overflow_warning();
 
 int main() {
     FILE *input_stream = NULL;
+    stack = (int *) malloc(stack_max * sizeof(int));
     int is_exit = 0;
     while (is_exit != 1) {
         if (is_exit == -1 || input_stream == NULL) {
@@ -57,7 +59,7 @@ int main() {
                 if (mode == 'y' || mode == 'Y') {
                     break;
                 }
-                printf("Reset all registers to 0? Y/N\n");
+                printf("Reset stack and registers? Y/N\n");
                 while (1) {
                     do {
                         mode = getchar();
@@ -76,6 +78,10 @@ int main() {
                         s[i] = 0;
                     }
                     status = 0;
+                    free(stack);
+                    stack_max = 10;
+                    stack_index = -1;
+                    stack = (int *) malloc(stack_max * sizeof(int));
                 }
                 fclose(output_stream);
                 output_stream = NULL;
@@ -129,21 +135,13 @@ int main() {
     return 0;
 }
 
-int str_case(char *key) {
-    if (strcmp(command, key) == 0) {
-        return 1;
-    } else {
-        return 0;
-    }
-}
-
 int processor(FILE *input_stream) {
-    int arg[ARG_MAX] = {0};
-    for (int i = 0; i < ARG_MAX; ++i) {
+    int arg[ARG_MAX_COUNT] = {0};
+    for (int i = 0; i < ARG_MAX_COUNT; ++i) {
         arg_type[i] = -1;
     }
     is_overflow = 0;
-    int is_eof = get_input_file(arg, input_stream);
+    int is_eof = get_input_from_file(arg, input_stream);
     while (ftell(input_stream) != line_place[current_line]) {
         ++current_line;
     }
@@ -398,6 +396,26 @@ int processor(FILE *input_stream) {
             ++current_line;
             fseek(input_stream, line_place[current_line], SEEK_SET);
         }
+    } else if (str_case("PUSH")) {
+        int imm_need[] = {0};
+        if (arg_error(1, imm_need) || segmentation_error(arg))
+            return 0;
+        ++stack_index;
+        if (stack_index == stack_max) {
+            stack_max += 10;
+            stack = realloc(stack, stack_max * sizeof(int));
+        }
+        stack[stack_index] = s[arg[0]];
+    } else if (str_case("POP")) {
+        int imm_need[] = {0};
+        if (arg_error(1, imm_need) || segmentation_error(arg))
+            return 0;
+        if (stack_index == -1) {
+            printf("Line:%-3d| Stack error!\n\tStack is empty\n", current_line);
+            return 0;
+        }
+        s[arg[0]] = stack[stack_index];
+        --stack_index;
     } else if (str_case("EXIT")) {
         int imm_need[] = {-1};
         if (arg_error(0, imm_need)) {
@@ -419,7 +437,7 @@ int processor(FILE *input_stream) {
     return 0;
 }
 
-int get_input_file(int *arg, FILE *input_stream) {
+int get_input_from_file(int *arg, FILE *input_stream) {
     arg_count = 0;
     if (fscanf(input_stream, "%s", command) == EOF)
         return 1;
@@ -428,7 +446,7 @@ int get_input_file(int *arg, FILE *input_stream) {
     }
     int tmp;
     int sign = 1;
-    while (arg_count < ARG_MAX) {
+    while (arg_count < ARG_MAX_COUNT) {
         tmp = getc(input_stream);
         while (tmp == ' ' || tmp == '\t')
             tmp = getc(input_stream);
@@ -602,9 +620,18 @@ int get_input_file(int *arg, FILE *input_stream) {
     return 0;
 }
 
+int str_case(char *key) {
+    if (strcmp(command, key) == 0) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
 void status_check(long long int result, char operator, int num_1, int num_2) {
     status = 0;
     int bit_count = operator == '*' ? 64 : 32;
+
     //Parity flag
     int odd = 0;
     for (int i = 0; i < bit_count; ++i) {
