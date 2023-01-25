@@ -12,7 +12,8 @@ char command[INSTRUCTION_MAX_CHARACTERS];
 int arg_type[ARG_MAX];
 int arg_count;
 long *line_place = NULL;
-unsigned int current_line;
+int current_line;
+int max_line;
 char is_overflow = 0;
 FILE *output_stream = NULL;
 
@@ -92,19 +93,20 @@ int main() {
                 }
                 break;
             }
-            current_line = 1;
+            max_line = 1;
             char tmp;
             do {
                 tmp = getc(input_stream);
                 if (tmp == '\n') {
-                    ++current_line;
+                    ++max_line;
                 }
             } while (tmp != EOF);
             rewind(input_stream);
             if (line_place != NULL)
                 free(line_place);
-            line_place = (long *) malloc((current_line + 1) * sizeof(long));
+            line_place = (long *) malloc((max_line + 1) * sizeof(long));
             line_place[0] = 0;
+            printf("sss%d\n", max_line);
             current_line = 1;
             do {
                 tmp = getc(input_stream);
@@ -328,8 +330,6 @@ int processor(FILE *input_stream) {
                 continue;
             }
         }
-
-
     } else if (str_case("OUTPUT")) {
         int imm_need[] = {-1};
         if (arg_error(0, imm_need)) {
@@ -340,9 +340,23 @@ int processor(FILE *input_stream) {
         int imm_need[] = {1};
         if (arg_error(1, imm_need) || segmentation_error(arg))
             return 0;
+        if (arg[0] > max_line || arg[0] <= 0) {
+            printf("Out of range error! | Line: %d\n\tLine %d doesn't exist\n", current_line, arg[0]);
+            return 0;
+        }
         current_line = arg[0] - 1;
         fseek(input_stream, line_place[current_line], SEEK_SET);
         return 0;
+    } else if (str_case("SKIE")) {
+        int imm_need[] = {0, 0};
+        if (arg_error(2, imm_need) || segmentation_error(arg))
+            return 0;
+        else if (current_line == max_line) {
+            printf("Out of range error! | Line: %d\n\tLine %d doesn't exist\n", current_line, max_line + 1);
+        } else if (s[arg[0]] == s[arg[1]]) {
+            ++current_line;
+            fseek(input_stream, line_place[current_line], SEEK_SET);
+        }
     } else if (str_case("EXIT")) {
         int imm_need[] = {-1};
         if (arg_error(0, imm_need)) {
@@ -352,9 +366,8 @@ int processor(FILE *input_stream) {
     } else if (command[0] == 0) {
         return 0;
     } else {
-        printf("Syntax Error! | Line: %d\n\tUnknown instruction %s\n", current_line, command);
+        printf("Syntax error! | Line: %d\n\tUnknown instruction %s\n", current_line, command);
     }
-
     if (is_eof == 2) {
         printf("Reached the end of file!\n");
         return -1;
@@ -616,7 +629,7 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
         if ((arg_need_type[index] != arg_type[index] && arg_need_type[index] != -1) || arg_type[index] == 2) {
             if (flag_invalid_input == 0) {
                 flag_invalid_input = 1;
-                printf("Syntax Error! | Line: %d\n", current_line);
+                printf("Syntax error! | Line: %d\n", current_line);
             }
             printf("\tArgument %d is invalid\n", index + 1);
         }
@@ -624,7 +637,7 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
     if (arg_need_count != arg_count) {
         if (flag_invalid_input == 0) {
             flag_invalid_input = 1;
-            printf("Syntax Error! | Line: %d\n", current_line);
+            printf("Syntax error! | Line: %d\n", current_line);
         }
         printf("\t%s instruction needs %d argument", command, arg_need_count);
         if (arg_need_count != 1) {
