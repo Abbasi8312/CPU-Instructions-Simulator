@@ -4,28 +4,27 @@
 #include <stdlib.h>
 
 #define ARG_MAX 3
-#define INSTRUCTION_MAX 12
+#define INSTRUCTION_MAX_CHARACTERS 12
 
 int s[32];
 unsigned __int8 status = 0;
-char command[INSTRUCTION_MAX];
+char command[INSTRUCTION_MAX_CHARACTERS];
 int arg_type[ARG_MAX];
 int arg_count;
-long *line_place;
-unsigned int *line_repeat;
-unsigned int current_line = 0;
-char is_loop = 0;
+long *line_place = NULL;
+unsigned int current_line;
 char is_overflow = 0;
+FILE *output_stream = NULL;
 
 int str_case(char *key);
 
 int get_input(int *arg, FILE *stream);
 
-int processor(FILE *stream);
+int processor(FILE *input_stream);
 
 void status_check(int result, char operator, int num_1, int num_2);
 
-void print_bits(unsigned int num, int bits);
+void print_bits(unsigned int num, int bits, FILE *stream);
 
 int arg_error(int arg_need_count, const int arg_need_type[]);
 
@@ -34,39 +33,98 @@ int segmentation_error(const int arg[]);
 void print_overflow_warning();
 
 int main() {
-    FILE *stream = fopen("in.txt", "r");
-    if (stream == NULL) {
-        fprintf(stderr, "Error!\n\tCouldn't find in.txt\n");
-        return 1;
-    }
-    current_line = 1;
-    char tmp;
-    do {
-        tmp = getc(stream);
-        if (tmp == '\n') {
-            ++current_line;
-        }
-    } while (tmp != EOF);
-    rewind(stream);
-    line_place = (long *) malloc((current_line + 1) * sizeof(long));
-    line_repeat = (unsigned int *) calloc(current_line, sizeof(unsigned int));
-    line_place[0] = 0;
-    current_line = 1;
-    do {
-        tmp = getc(stream);
-        if (tmp == '\n') {
-            line_place[current_line] = ftell(stream);
-            ++current_line;
-        }
-    } while (tmp != EOF);
-    line_place[current_line] = ftell(stream);
-    rewind(stream);
-    current_line = 0;
+    FILE *input_stream = NULL;
     int is_exit = 0;
-    while (!is_exit) {
-        is_exit = processor(stream);
+    while (is_exit != 1) {
+        if (is_exit == -1 || input_stream == NULL) {
+            if (is_exit == -1) {
+                printf("Do you want to exit? Y/N\n");
+                char mode, tmp;
+                while (1) {
+                    do {
+                        mode = getchar();
+                    } while (mode == ' ' || mode == '\n');
+                    do {
+                        tmp = getchar();
+                    } while (tmp == ' ');
+                    if (tmp != '\n' || mode != 'n' && mode != 'y' && mode != 'N' && mode != 'Y') {
+                        printf("Invalid input! Enter Y/N\n");
+                        continue;
+                    }
+                    break;
+                }
+                if (mode == 'y' || mode == 'Y') {
+                    break;
+                }
+                printf("Reset all registers to 0? Y/N\n");
+                while (1) {
+                    do {
+                        mode = getchar();
+                    } while (mode == ' ' || mode == '\n');
+                    do {
+                        tmp = getchar();
+                    } while (tmp == ' ');
+                    if (tmp != '\n' || mode != 'n' && mode != 'y' && mode != 'N' && mode != 'Y') {
+                        printf("Invalid input! Enter Y/N\n");
+                        continue;
+                    }
+                    break;
+                }
+                if (mode == 'y' || mode == 'Y') {
+                    for (int i = 0; i < 32; ++i) {
+                        s[i] = 0;
+                    }
+                    status = 0;
+                }
+                fclose(output_stream);
+                output_stream = NULL;
+            }
+            while (1) {
+                char input_name[100];
+                printf("Enter input file name:\n");
+                fgets(input_name, 99, stdin);
+                input_name[strcspn(input_name, "\t\n")] = 0;
+                input_stream = fopen(input_name, "r");
+                if (input_stream == NULL) {
+                    printf("Invalid file name!\n");
+                    is_exit = -1;
+                    continue;
+                }
+                break;
+            }
+            current_line = 1;
+            char tmp;
+            do {
+                tmp = getc(input_stream);
+                if (tmp == '\n') {
+                    ++current_line;
+                }
+            } while (tmp != EOF);
+            rewind(input_stream);
+            if (line_place != NULL)
+                free(line_place);
+            line_place = (long *) malloc((current_line + 1) * sizeof(long));
+            line_place[0] = 0;
+            current_line = 1;
+            do {
+                tmp = getc(input_stream);
+                if (tmp == '\n') {
+                    line_place[current_line] = ftell(input_stream);
+                    ++current_line;
+                }
+            } while (tmp != EOF);
+            line_place[current_line] = ftell(input_stream);
+            rewind(input_stream);
+            current_line = 0;
+        }
+        is_exit = processor(input_stream);
     }
-    fclose(stream);
+    if (fclose(input_stream) != 0) {
+        fprintf(stdout, "Error closing input file!");
+    }
+    if (output_stream != NULL && fclose(output_stream) != 0) {
+        fprintf(stdout, "Error closing output file!");
+    }
     return 0;
 }
 
@@ -78,28 +136,27 @@ int str_case(char *key) {
     }
 }
 
-int processor(FILE *stream) {
+int processor(FILE *input_stream) {
     int arg[ARG_MAX] = {0};
     for (int i = 0; i < ARG_MAX; ++i) {
         arg_type[i] = -1;
     }
-    int is_eof = get_input(arg, stream);
-    while (ftell(stream) != line_place[current_line]) {
-        ++line_repeat[current_line];
+    int is_eof = get_input(arg, input_stream);
+    while (ftell(input_stream) != line_place[current_line]) {
         ++current_line;
     }
     if (is_overflow) {
         print_overflow_warning();
         is_overflow = 0;
     }
-    for (int i = 1; i < INSTRUCTION_MAX && command[i] != 0; ++i)
+    for (int i = 1; i < INSTRUCTION_MAX_CHARACTERS && command[i] != 0; ++i)
         if (command[i - 1] == '/' && command[i] == '/') {
             command[i - 1] = 0;
             break;
         }
     if (is_eof == 1) {
-        printf("Reached the end of file!");
-        return 1;
+        printf("Reached the end of file!\n");
+        return -1;
     } else if (str_case("ADD")) {
         int imm_need[] = {0, 0, 0};
         if (arg_error(3, imm_need) || segmentation_error(arg))
@@ -186,11 +243,71 @@ int processor(FILE *stream) {
             return 0;
         }
         for (int i = 0; i < 32; ++i) {
-            printf("   S%02d || Decimal: % -11d || Binary:", i, s[i]);
-            print_bits(s[i], 32);
+            fprintf(stdout, "   S%02d || Decimal: % -11d || Binary:", i, s[i]);
+            print_bits(s[i], 32, stdout);
         }
-        printf("Status || Decimal: % -11d || Binary:\t\t\t    ", status);
-        print_bits(status, 8);
+        fprintf(stdout, "Status || Decimal: % -11d || Binary:", status);
+        for (int i = 0; i < 27; ++i)
+            putc(' ', stdout);
+        print_bits(status, 8, stdout);
+    } else if (str_case("DUMP_REGS_F")) {
+        int imm_need[] = {-1};
+        if (arg_error(0, imm_need)) {
+            return 0;
+        }
+        if (output_stream == NULL || ferror(output_stream)) {
+            if (ferror(output_stream)) {
+                printf("Can't access output file!\n");
+                clearerr(output_stream);
+            }
+            while (1) {
+                char output_name[100];
+                char tmp;
+                printf("Enter output file name:\n");
+                fgets(output_name, 99, stdin);
+                output_name[strcspn(output_name, "\t\n")] = 0;
+                output_stream = fopen(output_name, "r");
+                if (output_stream != NULL) {
+                    printf("%s already exists! append, overwrite or enter a new name? a/w/c\n", output_name);
+                    char mode;
+                    while (1) {
+                        do {
+                            mode = getchar();
+                        } while (mode == ' ' || mode == '\n');
+                        do {
+                            tmp = getchar();
+                        } while (tmp == ' ');
+                        if (tmp != '\n' || mode != 'a' && mode != 'w' && mode != 'c') {
+                            printf("Invalid input! Enter a:append / w:overwrite / c:cancel\n");
+                            continue;
+                        }
+                        break;
+                    }
+                    if (mode == 'c')
+                        continue;
+                    else if (mode == 'a') {
+                        output_stream = fopen(output_name, "a");
+                        fputc('\n', output_stream);
+                    } else if (mode == 'w')
+                        output_stream = fopen(output_name, "w");
+                } else
+                    output_stream = fopen(output_name, "w");
+                if (output_stream == NULL) {
+                    printf("Invalid file name!\n");
+                    continue;
+                }
+                break;
+            }
+        }
+        for (int i = 0; i < 32; ++i) {
+            fprintf(output_stream, "   S%02d || Decimal: % -11d || Binary:", i, s[i]);
+            print_bits(s[i], 32, output_stream);
+        }
+        fprintf(output_stream, "Status || Decimal: % -11d || Binary:", status);
+        for (int i = 0; i < 27; ++i)
+            putc(' ', output_stream);
+        print_bits(status, 8, output_stream);
+        fputc('\n', output_stream);
     } else if (str_case("INPUT")) {
         int imm_need[] = {-1};
         if (arg_error(0, imm_need)) {
@@ -223,24 +340,8 @@ int processor(FILE *stream) {
         int imm_need[] = {1};
         if (arg_error(1, imm_need) || segmentation_error(arg))
             return 0;
-        if (line_repeat[arg[0] - 1] >= 1 && is_loop == 0) {
-            printf("Warning! | Line: %d\n\tEnter endless loop? (Y/N)\n", current_line);
-            char tmp;
-            while (1) {
-                tmp = getchar();
-                if (tmp == 'Y' || tmp == 'y') {
-                    is_loop = 1;
-                    break;
-                } else if (tmp == 'n' || tmp == 'N') {
-                    return 0;
-                } else {
-                    printf("Invalid Input! Enter Y/N\n");
-                }
-                while (getchar() != '\n');
-            }
-        }
         current_line = arg[0] - 1;
-        fseek(stream, line_place[current_line], SEEK_SET);
+        fseek(input_stream, line_place[current_line], SEEK_SET);
         return 0;
     } else if (str_case("EXIT")) {
         int imm_need[] = {-1};
@@ -255,8 +356,8 @@ int processor(FILE *stream) {
     }
 
     if (is_eof == 2) {
-        printf("Reached the end of file!");
-        return 1;
+        printf("Reached the end of file!\n");
+        return -1;
     }
     return 0;
 }
@@ -497,16 +598,16 @@ void status_check(int result, char operator, int num_1, int num_2) {
     }
 }
 
-void print_bits(unsigned int num, int bits) {
+void print_bits(unsigned int num, int bits, FILE *stream) {
     unsigned int mask = 1 << (bits - 1);
     for (int i = 0; i < bits; ++i) {
         if (i % 8 == 0) {
-            putchar(' ');
+            putc(' ', stream);
         }
-        putchar(num & mask ? '1' : '0');
+        putc(num & mask ? '1' : '0', stream);
         mask >>= 1;
     }
-    putchar('\n');
+    putc('\n', stream);
 }
 
 int arg_error(const int arg_need_count, const int arg_need_type[]) {
