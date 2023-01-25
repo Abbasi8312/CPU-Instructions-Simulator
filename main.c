@@ -23,7 +23,7 @@ int get_input(int *arg, FILE *stream);
 
 int processor(FILE *input_stream);
 
-void status_check(int result, char operator, int num_1, int num_2);
+void status_check(long long int result, char operator, int num_1, int num_2);
 
 void print_bits(unsigned int num, int bits, FILE *stream);
 
@@ -106,7 +106,6 @@ int main() {
                 free(line_place);
             line_place = (long *) malloc((max_line + 1) * sizeof(long));
             line_place[0] = 0;
-            printf("sss%d\n", max_line);
             current_line = 1;
             do {
                 tmp = getc(input_stream);
@@ -316,19 +315,38 @@ int processor(FILE *input_stream) {
             return 0;
         }
         while (1) {
+            s[0] = 0;
             printf("S0:\n");
-            scanf("%d", s);
-            char tmp;
+            char tmp, sign = 1;
             do {
                 tmp = getchar();
             } while (tmp == ' ' || tmp == '\t');
-            if (tmp == '\n')
-                break;
-            else {
-                printf("Invalid input!\t");
-                while (getchar() != '\n');
-                continue;
+            if (tmp == '-') {
+                sign = -1;
+                tmp = getchar();
+            } else if (tmp == '+') {
+                tmp = getchar();
             }
+            if (isdigit(tmp)) {
+                int index = 0;
+                char num[11] = {0};
+                while (isdigit(tmp)) {
+                    if (index < 11)
+                        num[index] = tmp;
+                    s[0] = s[0] * 10 + sign * (tmp - '0');
+                    tmp = getchar();
+                    ++index;
+                }
+                if (sign > 0 && strcmp(num, "2147483648") == 0 || index == 10 && strcmp(num, "2147483648") > 0 ||
+                    index > 10)
+                    print_overflow_warning();
+                while (tmp == ' ' || tmp == '\t')
+                    tmp = getchar();
+                if (tmp == '\n')
+                    break;
+            }
+            printf("Invalid input!\n");
+            while (getchar() != '\n');
         }
     } else if (str_case("OUTPUT")) {
         int imm_need[] = {-1};
@@ -347,6 +365,14 @@ int processor(FILE *input_stream) {
         current_line = arg[0] - 1;
         fseek(input_stream, line_place[current_line], SEEK_SET);
         return 0;
+    } else if (str_case("MULL")) {
+        int imm_need[] = {0, 0};
+        if (arg_error(2, imm_need) || segmentation_error(arg))
+            return 0;
+        long long int tmp = (long long int) s[arg[0]] * (long long int) s[arg[1]];
+        status_check(tmp, '*', s[arg[0]], s[arg[1]]);
+        s[arg[0]] = tmp >> 32;
+        s[arg[1]] = tmp;
     } else if (str_case("SKIE")) {
         int imm_need[] = {0, 0};
         if (arg_error(2, imm_need) || segmentation_error(arg))
@@ -386,7 +412,7 @@ int get_input(int *arg, FILE *stream) {
     int sign = 1;
     while (arg_count < ARG_MAX) {
         tmp = getc(stream);
-        while (tmp == ' ')
+        while (tmp == ' ' || tmp == '\t')
             tmp = getc(stream);
         if (tmp == '/') {
             tmp = getc(stream);
@@ -478,12 +504,13 @@ int get_input(int *arg, FILE *stream) {
         }
         if (isdigit(tmp)) {
             int index = 0;
-            char num[20] = {0};
+            char num[11] = {0};
             if (arg_type[arg_count] == -1) {
                 arg_type[arg_count] = 1;
             }
             while (isdigit(tmp)) {
-                num[index] = tmp;
+                if (index < 11)
+                    num[index] = tmp;
                 arg[arg_count] = arg[arg_count] * 10 + sign * (tmp - '0');
                 tmp = getc(stream);
                 ++index;
@@ -492,7 +519,7 @@ int get_input(int *arg, FILE *stream) {
                 index > 10)
                 is_overflow = 1;
             ++arg_count;
-            while (tmp == ' ')
+            while (tmp == ' ' || tmp == '\t')
                 tmp = getc(stream);
             if (tmp == '\n')
                 return 0;
@@ -555,12 +582,12 @@ int get_input(int *arg, FILE *stream) {
     return 0;
 }
 
-void status_check(int result, char operator, int num_1, int num_2) {
+void status_check(long long int result, char operator, int num_1, int num_2) {
     status = 0;
-
+    int bit_count = operator == '*' ? 64: 32;
     //Parity flag
     int odd = 0;
-    for (int i = 0; i < 32; ++i) {
+    for (int i = 0; i < bit_count; ++i) {
         if (result >> i & 1) {
             odd = 1 - odd;
         }
@@ -589,13 +616,6 @@ void status_check(int result, char operator, int num_1, int num_2) {
             break;
         case '-':
             if (num_1 < 0 && num_2 > INT_MAX + num_1 || num_1 > 0 && num_2 < INT_MIN + num_1) {
-                overflow_flag = 1;
-            }
-            break;
-        case '*':
-            if (num_2 == -1 && num_1 == INT_MIN || num_1 == -1 && num_2 == INT_MIN ||
-                num_1 != 0 && num_2 > INT_MAX / num_1 ||
-                num_1 != 0 && num_2 < INT_MIN / num_1) {
                 overflow_flag = 1;
             }
             break;
