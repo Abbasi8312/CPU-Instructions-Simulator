@@ -18,6 +18,7 @@ int arg_count;
 int is_overflow = 0;
 int *stack;
 int stack_index = -1, stack_max = 10;
+int suggestion_status = 1;
 
 int get_input_file_name();
 
@@ -39,13 +40,15 @@ void dump_regs(FILE *stream);
 
 void print_bits(unsigned int num, int bits, FILE *stream);
 
-int arg_error(int arg_need_count, const int arg_need_type[]);
+int arg_error(const int arg[], int arg_need_count, const int arg_need_type[]);
 
 int segmentation_error(const int arg[]);
 
 void print_overflow_warning();
 
-int yes_no();
+int yes_no(int cancel);
+
+int suggest(const int arg[], int arg_need_count, const int arg_need_type[]);
 
 int main() {
     stack = (int *) malloc(stack_max * sizeof(int));
@@ -54,7 +57,7 @@ int main() {
         if (is_exit < 0 || input_stream == NULL) {
             if (is_exit != 0) {
                 printf("Do you want to exit? Y/N\n");
-                if (yes_no())
+                if (yes_no(0))
                     break;
                 if (is_exit == -1)
                     reset();
@@ -91,71 +94,71 @@ int processor() {
         return -1;
     } else if (str_case("ADD")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         int tmp = reg[arg[1]] + reg[arg[2]];
         status_check(tmp, '+', reg[arg[1]], reg[arg[2]]);
         reg[arg[0]] = tmp;
     } else if (str_case("SUB")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         int tmp = reg[arg[1]] - reg[arg[2]];
         status_check(tmp, '-', reg[arg[1]], reg[arg[2]]);
         reg[arg[0]] = tmp;
     } else if (str_case("AND")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         reg[arg[0]] = reg[arg[1]] & reg[arg[2]];
         status_check(reg[arg[0]], '&', reg[arg[1]], reg[arg[2]]);
     } else if (str_case("XOR")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         reg[arg[0]] = reg[arg[1]] ^ reg[arg[2]];
         status_check(reg[arg[0]], '^', reg[arg[1]], reg[arg[2]]);
     } else if (str_case("OR")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         reg[arg[0]] = reg[arg[1]] | reg[arg[2]];
         status_check(reg[arg[0]], '|', reg[arg[1]], reg[arg[2]]);
     } else if (str_case("ADDI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         int tmp = reg[arg[1]] + arg[2];
         status_check(tmp, '+', reg[arg[1]], arg[2]);
         reg[arg[0]] = tmp;
     } else if (str_case("SUBI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         int tmp = reg[arg[1]] - arg[2];
         status_check(tmp, '-', reg[arg[1]], arg[2]);
         reg[arg[0]] = tmp;
     } else if (str_case("ANDI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         reg[arg[0]] = reg[arg[1]] & arg[2];
         status_check(reg[arg[0]], '&', reg[arg[1]], arg[2]);
     } else if (str_case("XORI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         reg[arg[0]] = reg[arg[1]] ^ arg[2];
         status_check(reg[arg[0]], '^', reg[arg[1]], arg[2]);
     } else if (str_case("ORI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(3, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
             return 0;
         reg[arg[0]] = reg[arg[1]] | arg[2];
         status_check(reg[arg[0]], '|', reg[arg[1]], arg[2]);
     } else if (str_case("MOV")) {
         int arg_need_type[] = {0, -1};
-        if (arg_error(2, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
             return 0;
         if (arg_type[1]) {
             reg[arg[0]] = arg[1];
@@ -164,25 +167,25 @@ int processor() {
         }
     } else if (str_case("SWP")) {
         int arg_need_type[] = {0, 0};
-        if (arg_error(2, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
             return 0;
         int tmp = reg[arg[0]];
         reg[arg[0]] = reg[arg[1]];
         reg[arg[1]] = tmp;
     } else if (str_case("DUMP_REGS")) {
         int arg_need_type[] = {-1};
-        if (arg_error(0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type))
             return 0;
         dump_regs(stdout);
     } else if (str_case("DUMP_REGS_F")) {
         int arg_need_type[] = {-1};
-        if (arg_error(0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type))
             return 0;
         open_output_file();
         dump_regs(output_stream);
     } else if (str_case("INPUT")) {
         int arg_need_type[] = {-1};
-        if (arg_error(0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type))
             return 0;
         while (1) {
             reg[0] = 0;
@@ -221,12 +224,12 @@ int processor() {
         }
     } else if (str_case("OUTPUT")) {
         int arg_need_type[] = {-1};
-        if (arg_error(0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type))
             return 0;
         printf("%d\n", reg[0]);
     } else if (str_case("JMP")) {
         int arg_need_type[] = {1};
-        if (arg_error(1, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 1, arg_need_type) || segmentation_error(arg))
             return 0;
         if (arg[0] > max_line || arg[0] <= 0) {
             printf("Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line, arg[0]);
@@ -237,7 +240,7 @@ int processor() {
         return 0;
     } else if (str_case("MULL")) {
         int arg_need_type[] = {0, 0};
-        if (arg_error(2, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
             return 0;
         long long int tmp = (long long int) reg[arg[0]] * (long long int) reg[arg[1]];
         status_check(tmp, '*', reg[arg[0]], reg[arg[1]]);
@@ -245,7 +248,7 @@ int processor() {
         reg[arg[1]] = (int) tmp;
     } else if (str_case("DIV")) {
         int arg_need_type[] = {0, 0};
-        if (arg_error(2, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
             return 0;
         if (reg[arg[1]] == 0) {
             printf("Error! Division by zero\n");
@@ -261,7 +264,7 @@ int processor() {
         }
     } else if (str_case("SKIE")) {
         int arg_need_type[] = {0, 0};
-        if (arg_error(2, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
             return 0;
         else if (current_line == max_line && reg[arg[0]] == reg[arg[1]]) {
             printf("Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line, max_line + 1);
@@ -271,7 +274,7 @@ int processor() {
         }
     } else if (str_case("PUSH")) {
         int arg_need_type[] = {0};
-        if (arg_error(1, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 1, arg_need_type) || segmentation_error(arg))
             return 0;
         ++stack_index;
         if (stack_index == stack_max) {
@@ -281,7 +284,7 @@ int processor() {
         stack[stack_index] = reg[arg[0]];
     } else if (str_case("POP")) {
         int arg_need_type[] = {0};
-        if (arg_error(1, arg_need_type) + segmentation_error(arg) > 0)
+        if (arg_error(arg, 1, arg_need_type) || segmentation_error(arg))
             return 0;
         if (stack_index == -1) {
             printf("Line:%-3d| Stack error!\n\tStack is empty\n", current_line);
@@ -291,7 +294,7 @@ int processor() {
         --stack_index;
     } else if (str_case("EXIT")) {
         int arg_need_type[] = {-1};
-        if (arg_error(0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type))
             return 0;
         return 1;
     } else if (instruction[0] == 0) {
@@ -554,7 +557,7 @@ void print_bits(unsigned int num, int bits, FILE *stream) {
     putc('\n', stream);
 }
 
-int arg_error(const int arg_need_count, const int arg_need_type[]) {
+int arg_error(const int arg[], int arg_need_count, const int arg_need_type[]) {
     int index, flag_invalid_input = 0;
     for (index = 0; index < arg_count && index < arg_need_count; ++index) {
         if ((arg_need_type[index] != arg_type[index] && arg_need_type[index] != -1) || arg_type[index] == 2) {
@@ -592,7 +595,8 @@ int arg_error(const int arg_need_count, const int arg_need_type[]) {
             }
         }
         putchar('\n');
-        return 1;
+        if (suggest(arg, arg_need_count, arg_need_type))
+            return 1;
     }
     return 0;
 }
@@ -619,7 +623,7 @@ void print_overflow_warning() {
 
 void reset() {
     printf("Reset stack and registers? Y/N\n");
-    if (yes_no()) {
+    if (yes_no(0)) {
         for (int i = 0; i < 32; ++i) {
             reg[i] = 0;
         }
@@ -631,6 +635,7 @@ void reset() {
     }
     fclose(output_stream);
     output_stream = NULL;
+    suggestion_status = 1;
 }
 
 int get_input_file_name() {
@@ -682,7 +687,6 @@ void open_output_file() {
         }
         while (1) {
             char *output_name = (char *) malloc(100 * sizeof(char));
-            char tmp;
             printf("Enter output file name:\n");
             fgets(output_name, 99, stdin);
             while (output_name != 0 && (*output_name == ' ' || *output_name == '\t'))
@@ -690,28 +694,16 @@ void open_output_file() {
             output_name[strcspn(output_name, "\t\n")] = 0;
             output_stream = fopen(output_name, "r");
             if (output_stream != NULL) {
-                printf("%s already exists! append, overwrite or enter a new name? a/w/c\n", output_name);
-                char mode;
-                while (1) {
-                    do {
-                        mode = getchar();
-                    } while (mode == ' ' || mode == '\n');
-                    do {
-                        tmp = getchar();
-                    } while (tmp == ' ');
-                    if (tmp != '\n' || mode != 'a' && mode != 'w' && mode != 'c') {
-                        printf("Invalid input! Enter a:append / w:overwrite / c:cancel\n");
-                        continue;
-                    }
-                    break;
-                }
-                if (mode == 'c')
+                printf("%s already exists! Overwrite? Y:Overwrite / N:Append / C:Cancel\n", output_name);
+                int tmp = yes_no(1);
+                if (tmp == -1) {
                     continue;
-                else if (mode == 'a') {
+                } else if (tmp == 0) {
                     output_stream = fopen(output_name, "a");
                     fputc('\n', output_stream);
-                } else if (mode == 'w')
+                } else {
                     output_stream = fopen(output_name, "w");
+                }
             } else {
                 output_stream = fopen(output_name, "w");
             }
@@ -736,7 +728,7 @@ void dump_regs(FILE *stream) {
     fputc('\n', stream);
 }
 
-int yes_no() {
+int yes_no(int cancel) {
     int tmp, mode;
     while (1) {
         do {
@@ -746,7 +738,9 @@ int yes_no() {
             tmp = getchar();
         } while (tmp == ' ' || tmp == '\t');
         if (tmp != '\n' || mode != 'n' && mode != 'y' && mode != 'N' && mode != 'Y') {
-            printf("Invalid input! Enter Y/N\n");
+            if (cancel == 1 && (mode == 'c' || mode == 'C'))
+                break;
+            printf("Invalid input! Enter Y/N%s\n", cancel == 1 ? "/C" : "");
             while (getchar() != '\n');
             continue;
         }
@@ -754,5 +748,34 @@ int yes_no() {
     }
     if (mode == 'Y' || mode == 'y')
         return 1;
+    else if (mode == 'C' || mode == 'c')
+        return -1;
     return 0;
+}
+
+int suggest(const int arg[], int arg_need_count, const int arg_need_type[]) {
+    if (suggestion_status == 0)
+        return 1;
+    for (int i = 0; i < arg_need_count; ++i) {
+        if (arg_need_type[i] == 0 && (arg[i] > 31 || arg[i] < 0))
+            return 1;
+    }
+    printf("Did you mean %s", instruction);
+    for (int i = 0; i < arg_need_count; ++i) {
+        if (i != 0)
+            putchar(',');
+        putchar(' ');
+        if (arg_need_type[i] == 0)
+            putchar('S');
+        printf("%d", arg[i]);
+    }
+    printf(" ? Y:Yes / N:No / C:Cancel all suggestions\n");
+    int tmp = yes_no(1);
+    if (tmp == 1) {
+        for (int i = 0; i < arg_count; ++i)
+            arg_type[i] = arg_need_type[i];
+        return 0;
+    } else if (tmp == -1)
+        suggestion_status = 0;
+    return 1;
 }
