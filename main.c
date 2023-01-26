@@ -5,9 +5,11 @@
 
 #define ARG_MAX_COUNT 3
 #define INSTRUCTION_MAX_CHARACTERS 12
+#define STANDARD_ERROR_OUTPUT stdout //stderr
 
 FILE *input_stream = NULL;
 FILE *output_stream = NULL;
+FILE *LOG_STREAM;
 long *line_place = NULL;
 int current_line, max_line;
 int reg[32];
@@ -24,7 +26,7 @@ int get_input_file_name();
 
 void open_input_file();
 
-void reset();
+void reset_check();
 
 int processor();
 
@@ -40,9 +42,9 @@ void dump_regs(FILE *stream);
 
 void print_bits(unsigned int num, int bits, FILE *stream);
 
-int arg_error(const int arg[], int arg_need_count, const int arg_need_type[]);
+int arg_error(const int arg[], int arg_need_count, const int arg_need_type[], FILE *stream);
 
-int segmentation_error(const int arg[]);
+int segmentation_error(const int *arg, FILE *stream);
 
 void print_overflow_warning();
 
@@ -53,6 +55,7 @@ int suggest(const int arg[], int arg_need_count, const int arg_need_type[]);
 int main() {
     stack = (int *) malloc(stack_max * sizeof(int));
     int is_exit = 0;
+    LOG_STREAM = fopen("Errors.log", "w");
     while (is_exit != 1) {
         if (is_exit < 0 || input_stream == NULL) {
             if (is_exit != 0) {
@@ -60,18 +63,20 @@ int main() {
                 if (yes_no(0))
                     break;
                 if (is_exit == -1)
-                    reset();
+                    reset_check();
             }
             if (get_input_file_name()) {
                 is_exit = -2;
                 continue;
             }
             open_input_file();
+            fprintf(LOG_STREAM, "\n___________________________________________________________________\n");
         }
         is_exit = processor(input_stream);
     }
     fclose(input_stream);
     fclose(output_stream);
+    fclose(LOG_STREAM);
     return 0;
 }
 
@@ -94,71 +99,71 @@ int processor() {
         return -1;
     } else if (str_case("ADD")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         int tmp = reg[arg[1]] + reg[arg[2]];
         status_check(tmp, '+', reg[arg[1]], reg[arg[2]]);
         reg[arg[0]] = tmp;
     } else if (str_case("SUB")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         int tmp = reg[arg[1]] - reg[arg[2]];
         status_check(tmp, '-', reg[arg[1]], reg[arg[2]]);
         reg[arg[0]] = tmp;
     } else if (str_case("AND")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         reg[arg[0]] = reg[arg[1]] & reg[arg[2]];
         status_check(reg[arg[0]], '&', reg[arg[1]], reg[arg[2]]);
     } else if (str_case("XOR")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         reg[arg[0]] = reg[arg[1]] ^ reg[arg[2]];
         status_check(reg[arg[0]], '^', reg[arg[1]], reg[arg[2]]);
     } else if (str_case("OR")) {
         int arg_need_type[] = {0, 0, 0};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         reg[arg[0]] = reg[arg[1]] | reg[arg[2]];
         status_check(reg[arg[0]], '|', reg[arg[1]], reg[arg[2]]);
     } else if (str_case("ADDI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         int tmp = reg[arg[1]] + arg[2];
         status_check(tmp, '+', reg[arg[1]], arg[2]);
         reg[arg[0]] = tmp;
     } else if (str_case("SUBI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         int tmp = reg[arg[1]] - arg[2];
         status_check(tmp, '-', reg[arg[1]], arg[2]);
         reg[arg[0]] = tmp;
     } else if (str_case("ANDI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         reg[arg[0]] = reg[arg[1]] & arg[2];
         status_check(reg[arg[0]], '&', reg[arg[1]], arg[2]);
     } else if (str_case("XORI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         reg[arg[0]] = reg[arg[1]] ^ arg[2];
         status_check(reg[arg[0]], '^', reg[arg[1]], arg[2]);
     } else if (str_case("ORI")) {
         int arg_need_type[] = {0, 0, 1};
-        if (arg_error(arg, 3, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 3, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         reg[arg[0]] = reg[arg[1]] | arg[2];
         status_check(reg[arg[0]], '|', reg[arg[1]], arg[2]);
     } else if (str_case("MOV")) {
         int arg_need_type[] = {0, -1};
-        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 2, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         if (arg_type[1]) {
             reg[arg[0]] = arg[1];
@@ -167,25 +172,25 @@ int processor() {
         }
     } else if (str_case("SWP")) {
         int arg_need_type[] = {0, 0};
-        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 2, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         int tmp = reg[arg[0]];
         reg[arg[0]] = reg[arg[1]];
         reg[arg[1]] = tmp;
     } else if (str_case("DUMP_REGS")) {
         int arg_need_type[] = {-1};
-        if (arg_error(arg, 0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type, STANDARD_ERROR_OUTPUT))
             return 0;
         dump_regs(stdout);
     } else if (str_case("DUMP_REGS_F")) {
         int arg_need_type[] = {-1};
-        if (arg_error(arg, 0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type, STANDARD_ERROR_OUTPUT))
             return 0;
         open_output_file();
         dump_regs(output_stream);
     } else if (str_case("INPUT")) {
         int arg_need_type[] = {-1};
-        if (arg_error(arg, 0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type, STANDARD_ERROR_OUTPUT))
             return 0;
         while (1) {
             reg[0] = 0;
@@ -224,15 +229,17 @@ int processor() {
         }
     } else if (str_case("OUTPUT")) {
         int arg_need_type[] = {-1};
-        if (arg_error(arg, 0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type, STANDARD_ERROR_OUTPUT))
             return 0;
         printf("%d\n", reg[0]);
     } else if (str_case("JMP")) {
         int arg_need_type[] = {1};
-        if (arg_error(arg, 1, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 1, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         if (arg[0] > max_line || arg[0] <= 0) {
-            printf("Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line, arg[0]);
+            fprintf(STANDARD_ERROR_OUTPUT, "Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line,
+                    arg[0]);
+            fprintf(LOG_STREAM, "Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line, arg[0]);
             return 0;
         }
         current_line = arg[0] - 1;
@@ -240,7 +247,7 @@ int processor() {
         return 0;
     } else if (str_case("MULL")) {
         int arg_need_type[] = {0, 0};
-        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 2, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         long long int tmp = (long long int) reg[arg[0]] * (long long int) reg[arg[1]];
         status_check(tmp, '*', reg[arg[0]], reg[arg[1]]);
@@ -248,10 +255,11 @@ int processor() {
         reg[arg[1]] = (int) tmp;
     } else if (str_case("DIV")) {
         int arg_need_type[] = {0, 0};
-        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 2, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         if (reg[arg[1]] == 0) {
-            printf("Error! Division by zero\n");
+            fprintf(STANDARD_ERROR_OUTPUT, "Error! Division by zero\n");
+            fprintf(LOG_STREAM, "Error! Division by zero\n");
         } else if (reg[arg[0]] == -2147483648 && reg[arg[1]] == -1) {
             reg[arg[1]] = 0;
             reg[arg[0]] = -2147483648;
@@ -264,17 +272,20 @@ int processor() {
         }
     } else if (str_case("SKIE")) {
         int arg_need_type[] = {0, 0};
-        if (arg_error(arg, 2, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 2, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         else if (current_line == max_line && reg[arg[0]] == reg[arg[1]]) {
-            printf("Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line, max_line + 1);
+            fprintf(STANDARD_ERROR_OUTPUT, "Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line,
+                    max_line + 1);
+            fprintf(LOG_STREAM, "Line:%-3d| Out of range error!\n\tLine %d doesn't exist\n", current_line,
+                    max_line + 1);
         } else if (reg[arg[0]] == reg[arg[1]]) {
             ++current_line;
             fseek(input_stream, line_place[current_line], SEEK_SET);
         }
     } else if (str_case("PUSH")) {
         int arg_need_type[] = {0};
-        if (arg_error(arg, 1, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 1, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         ++stack_index;
         if (stack_index == stack_max) {
@@ -284,23 +295,26 @@ int processor() {
         stack[stack_index] = reg[arg[0]];
     } else if (str_case("POP")) {
         int arg_need_type[] = {0};
-        if (arg_error(arg, 1, arg_need_type) || segmentation_error(arg))
+        if (arg_error(arg, 1, arg_need_type, STANDARD_ERROR_OUTPUT) || segmentation_error(arg, STANDARD_ERROR_OUTPUT))
             return 0;
         if (stack_index == -1) {
-            printf("Line:%-3d| Stack error!\n\tStack is empty\n", current_line);
+            fprintf(STANDARD_ERROR_OUTPUT, "Line:%-3d| Stack error!\n\tStack is empty\n", current_line);
+            fprintf(LOG_STREAM, "Line:%-3d| Stack error!\n\tStack is empty\n", current_line);
             return 0;
         }
         reg[arg[0]] = stack[stack_index];
         --stack_index;
     } else if (str_case("EXIT")) {
         int arg_need_type[] = {-1};
-        if (arg_error(arg, 0, arg_need_type))
+        if (arg_error(arg, 0, arg_need_type, STANDARD_ERROR_OUTPUT))
             return 0;
         return 1;
     } else if (instruction[0] == 0) {
         return 0;
     } else {
-        printf("Line:%-3d| Syntax error!\n\tUnknown instruction %s\n", current_line, instruction);
+        fprintf(STANDARD_ERROR_OUTPUT, "Line:%-3d| Syntax error!\n\tUnknown instruction %s\n", current_line,
+                instruction);
+        fprintf(LOG_STREAM, "Line:%-3d| Syntax error!\n\tUnknown instruction %s\n", current_line, instruction);
         return 0;
     }
     if (is_overflow)
@@ -557,61 +571,67 @@ void print_bits(unsigned int num, int bits, FILE *stream) {
     putc('\n', stream);
 }
 
-int arg_error(const int arg[], int arg_need_count, const int arg_need_type[]) {
+int arg_error(const int arg[], int arg_need_count, const int arg_need_type[], FILE *stream) {
     int index, flag_invalid_input = 0;
     for (index = 0; index < arg_count && index < arg_need_count; ++index) {
         if ((arg_need_type[index] != arg_type[index] && arg_need_type[index] != -1) || arg_type[index] == 2) {
             if (flag_invalid_input == 0) {
                 flag_invalid_input = 1;
-                printf("Line:%-3d| Syntax error!\n", current_line);
+                fprintf(stream, "Line:%-3d| Syntax error!\n", current_line);
             }
-            printf("\tArgument %d is invalid\n", index + 1);
+            fprintf(stream, "\tArgument %d is invalid\n", index + 1);
         }
     }
     if (arg_need_count != arg_count) {
         if (flag_invalid_input == 0) {
             flag_invalid_input = 1;
-            printf("Line:%-3d| Syntax error!\n", current_line);
+            fprintf(stream, "Line:%-3d| Syntax error!\n", current_line);
         }
-        printf("\t%s instruction needs %d argument", instruction, arg_need_count);
+        fprintf(stream, "\t%s instruction needs %d argument", instruction, arg_need_count);
         if (arg_need_count != 1)
-            putchar('s');
-        printf(" but you entered %d argument", arg_count);
+            putc('s', stream);
+        fprintf(stream, " but you entered %d argument", arg_count);
         if (arg_count != 1)
-            putchar('s');
-        printf("\n");
+            putc('s', stream);
+        putc('\n', stream);
     }
     if (flag_invalid_input) {
-        printf("\tCorrect format: %s ", instruction);
+        fprintf(stream, "\tCorrect format: %s ", instruction);
         for (int i = 0; i < arg_need_count; ++i) {
             if (i)
-                printf(", ");
+                fprintf(stream, ", ");
             if (arg_need_type[i] == 0) {
-                printf("S%c", 'a' + i);
+                fprintf(stream, "S%c", 'a' + i);
             } else if (arg_need_type[i] == 1) {
-                printf("Imm");
+                fprintf(stream, "Imm");
             } else {
-                printf("S%c/Imm", 'a' + i);
+                fprintf(stream, "S%c/Imm", 'a' + i);
             }
         }
-        putchar('\n');
+        putc('\n', stream);
+        if (stream == STANDARD_ERROR_OUTPUT)
+            arg_error(arg, arg_need_count, arg_need_type, LOG_STREAM);
+        else
+            return 0;
         if (suggest(arg, arg_need_count, arg_need_type))
             return 1;
     }
     return 0;
 }
 
-int segmentation_error(const int *arg) {
+int segmentation_error(const int *arg, FILE *stream) {
     int index, flag_invalid_input = 0;
     for (index = 0; index < arg_count; ++index) {
         if (arg_type[index] == 0 && (arg[index] < 0 || arg[index] >= 32)) {
             if (flag_invalid_input == 0) {
                 flag_invalid_input = 1;
-                printf("Line:%-3d| Segmentation error!\n", current_line);
+                fprintf(stream, "Line:%-3d| Segmentation error!\n", current_line);
             }
-            printf("\tArgument %d is invalid (Correct argument range: S0-S31)\n", index + 1);
+            fprintf(stream, "\tArgument %d is invalid (Correct argument range: S0-S31)\n", index + 1);
         }
     }
+    if (stream == STANDARD_ERROR_OUTPUT)
+        segmentation_error(arg, LOG_STREAM);
     if (flag_invalid_input == 1)
         return 1;
     return 0;
@@ -621,12 +641,11 @@ void print_overflow_warning() {
     printf("Line:%-3d| Overflow warning!\n", current_line);
 }
 
-void reset() {
+void reset_check() {
     printf("Reset stack and registers? Y/N\n");
     if (yes_no(0)) {
-        for (int i = 0; i < 32; ++i) {
+        for (int i = 0; i < 32; ++i)
             reg[i] = 0;
-        }
         status = 0;
         free(stack);
         stack_max = 10;
