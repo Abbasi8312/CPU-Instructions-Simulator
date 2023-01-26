@@ -3,24 +3,31 @@
 #include <ctype.h>
 #include <stdlib.h>
 
-#define ARG_MAX_COUNT 3
-#define INSTRUCTION_MAX_CHARACTERS 12
+#define ARG_MAX_COUNT 3                          ///<Maximum number of arguments to store.
+#define INSTRUCTION_MAX_CHARACTERS 12            ///<Maximum number of instruction characters to store.
 #define STANDARD_ERROR_OUTPUT stdout //stderr
 
-FILE *input_stream = NULL;
-FILE *output_stream = NULL;
-FILE *LOG_STREAM;
-long *line_place = NULL;
-int current_line, max_line;
-int reg[32];
-unsigned __int8 status = 0;
-char instruction[INSTRUCTION_MAX_CHARACTERS];
-int arg_type[ARG_MAX_COUNT];
-int arg_count;
-int is_overflow = 0;
-int *stack;
-int stack_index = -1, stack_max = 10;
-int suggestion_status = 1;
+FILE *input_stream = NULL;                       ///<File to read instructions from.
+FILE *output_stream = NULL;                      ///<File to print register values in.
+FILE *LOG_STREAM;                                ///<File to save errors in.
+long *line_place = NULL;                         ///<Place of each line in file.
+int current_line;                                ///<Number of line that was read.
+int max_line;                                    ///<File lines count.
+int reg[32];                                     ///<4 byte registers.
+unsigned __int8 status = 0;                      ///<1 byte status register.
+char instruction[INSTRUCTION_MAX_CHARACTERS];    ///<Last instruction read from file.
+int arg_type[ARG_MAX_COUNT];                     ///<Type of each argument in current line. 1:Imm / 0:Register number / -1:Empty
+int arg_count;                                   ///<Number of arguments in current line.
+int is_overflow = 0;                             ///<1 If overflowed.
+int *stack;                                      ///<Stack allocated in memory.
+int stack_index = -1;                            ///<Index of last element in stack.
+/**
+ * @brief Maximum number of elements to store.
+ *
+ * Increases if needed.
+ */
+int stack_max = 10;
+int suggestion_status = 1;                       ///<0 If suggestion is disabled by user.
 
 int get_input_file_name();
 
@@ -52,6 +59,13 @@ int yes_no(int cancel);
 
 int suggest(const int arg[], int arg_need_count, const int arg_need_type[]);
 
+/**
+ * @brief Main function of program.
+ *
+ * Checks for exit status.
+ * Gets input file name if needed.
+ * @note If there was no EXIT instruction in input file can open a new input file after EOF.
+ */
 int main() {
     stack = (int *) malloc(stack_max * sizeof(int));
     int is_exit = 0;
@@ -80,6 +94,18 @@ int main() {
     return 0;
 }
 
+/**
+ * @brief Execute instructions.
+ *
+ * Execute instruction if there are no errors.
+ * @return 0 Call next line.
+ * @return 1 Exit program.
+ * @return -1 End of file.
+ * @note Changes #current_line variable.
+ * @note Print detailed errors for Jmp, SKIE, POP, DIV (by zero) and unknown instruction.
+ * @note Print input overflow warnings.
+ * @note Print a message if EOF.
+ */
 int processor() {
     int arg[ARG_MAX_COUNT] = {0};
     for (int i = 0; i < ARG_MAX_COUNT; ++i)
@@ -88,12 +114,6 @@ int processor() {
     int is_eof = get_input_from_file(arg);
     while (ftell(input_stream) != line_place[current_line])
         ++current_line;
-    for (int i = 1; i < INSTRUCTION_MAX_CHARACTERS && instruction[i] != 0; ++i) {
-        if (instruction[i - 1] == '/' && instruction[i] == '/') {
-            instruction[i - 1] = 0;
-            break;
-        }
-    }
     if (is_eof == 1) {
         printf("Reached the end of file!\n");
         return -1;
@@ -326,13 +346,37 @@ int processor() {
     return 0;
 }
 
+/**
+ * @brief Read one line from file.
+ * Change #instruction and #arg based on input.
+ * @param arg An array of arguments to fill.
+ * @return 1 If program reaches EOF before getting instruction from current line.
+ * @return 2 If program reaches EOF after getting instruction from current line.
+ * @return 0 If next line is available.
+ * @note Function is whitespace-insensitive.
+ * @note If "//" is reached the rest of the line will be skipped as comment.
+ * @note Counts arguments of current line and stores it in #arg_count.
+ * @warning Function recognizes multiple arguments by comma(,).
+ */
 int get_input_from_file(int *arg) {
     arg_count = 0;
+    int tmp, sign = 1;
     if (fscanf(input_stream, "%s", instruction) == EOF)
         return 1;
     for (int i = 0; instruction[i]; ++i)
         instruction[i] = toupper(instruction[i]);
-    int tmp, sign = 1;
+    for (int i = 1; i < INSTRUCTION_MAX_CHARACTERS && instruction[i] != 0; ++i) {
+        if (instruction[i - 1] == '/' && instruction[i] == '/') {
+            instruction[i - 1] = 0;
+            while (1) {
+                tmp = getc(input_stream);
+                if (tmp == '\n')
+                    return 0;
+                else if (tmp == EOF)
+                    return 2;
+            }
+        }
+    }
     while (arg_count < ARG_MAX_COUNT) {
         tmp = getc(input_stream);
         while (tmp == ' ' || tmp == '\t')
@@ -507,6 +551,11 @@ int get_input_from_file(int *arg) {
     return 0;
 }
 
+/**
+ * @brief Recognize instruction
+ * @param key String to compare to the instruction from input file.
+ * @return 1 If strings are equivalent.
+ */
 int str_case(char *key) {
     if (strcmp(instruction, key) == 0) {
         return 1;
@@ -515,6 +564,14 @@ int str_case(char *key) {
     }
 }
 
+/**
+ * @brief Change status register.
+ * @param result Argument 1 (Status register change based on this number).
+ * @param operator '+'/'-'/...
+ * @param num_1 Argument 2.
+ * @param num_2 Argument 3.
+ * @note Function changes overflow flag only for '+' and '-' operands.
+ */
 void status_check(long long int result, char operator, int num_1, int num_2) {
     status = 0;
     int bit_count = operator == '*' ? 64 : 32;
@@ -560,6 +617,14 @@ void status_check(long long int result, char operator, int num_1, int num_2) {
     }
 }
 
+/**
+ * @brief Print numbers in binary.
+ *
+ * @param num Number to be printed.
+ * @param bits Bit count.
+ * @param stream Stream to print in.
+ * @note Places one space between bytes.
+ */
 void print_bits(unsigned int num, int bits, FILE *stream) {
     unsigned int mask = 1 << (bits - 1);
     for (int i = 0; i < bits; ++i) {
@@ -571,6 +636,19 @@ void print_bits(unsigned int num, int bits, FILE *stream) {
     putc('\n', stream);
 }
 
+/**
+ * @brief Check for typos in arguments.
+ *
+ * Print detailed errors.
+ * After printing errors suggests correct form if available.
+ * @param arg Array of arguments read from current line.
+ * @param arg_need_count How many arguments are needed.
+ * @param arg_need_type Type of each argument. 1:Imm / 0:Register number / 2:Any / -1:Empty
+ * @param stream Stream to print in.
+ * @return 1 Error.
+ * @return 0 No error.
+ * @note Print in both console and Errors.log .
+ */
 int arg_error(const int arg[], int arg_need_count, const int arg_need_type[], FILE *stream) {
     int index, flag_invalid_input = 0;
     for (index = 0; index < arg_count && index < arg_need_count; ++index) {
@@ -611,7 +689,7 @@ int arg_error(const int arg[], int arg_need_count, const int arg_need_type[], FI
         putc('\n', stream);
         if (stream == STANDARD_ERROR_OUTPUT)
             arg_error(arg, arg_need_count, arg_need_type, LOG_STREAM);
-        else
+        else if (stream == LOG_STREAM)
             return 0;
         if (suggest(arg, arg_need_count, arg_need_type))
             return 1;
@@ -619,6 +697,16 @@ int arg_error(const int arg[], int arg_need_count, const int arg_need_type[], FI
     return 0;
 }
 
+/**
+ * @brief Check for segmentation errors in using registers.
+ *
+ * Print detailed error;
+ * @param arg Array of arguments read from current line.
+ * @param stream Stream to print in.
+ * @return 1 Error.
+ * @return 0 No error.
+ * @note Print in both console and Errors.log .
+ */
 int segmentation_error(const int *arg, FILE *stream) {
     int index, flag_invalid_input = 0;
     for (index = 0; index < arg_count; ++index) {
@@ -637,10 +725,18 @@ int segmentation_error(const int *arg, FILE *stream) {
     return 0;
 }
 
+/**
+ * @brief Print overflow warning.
+ */
 void print_overflow_warning() {
     printf("Line:%-3d| Overflow warning!\n", current_line);
 }
 
+/**
+ * @brief Reset registers and stack to 0.
+ *
+ * Ask user first.
+ */
 void reset_check() {
     printf("Reset stack and registers? Y/N\n");
     if (yes_no(0)) {
@@ -657,6 +753,12 @@ void reset_check() {
     suggestion_status = 1;
 }
 
+/**
+ * @brief Get input file's name from user.
+ *
+ * @return 1 If can't find file.
+ * @return 0 If successful.
+ */
 int get_input_file_name() {
     char *input_name = (char *) malloc(100 * sizeof(char));
     printf("Enter input file name:\n");
@@ -672,6 +774,11 @@ int get_input_file_name() {
     return 0;
 }
 
+/**
+ * @brief Open input file.
+ *
+ * Stores place of each line in #line_place.
+ */
 void open_input_file() {
     max_line = 1;
     int tmp;
@@ -698,6 +805,12 @@ void open_input_file() {
     current_line = 0;
 }
 
+/**
+ * @brief Open output file.
+ *
+ *
+ * Ask from user if file exists (Y:Overwrite / N:Append / C:Cancel).
+ */
 void open_output_file() {
     if (output_stream == NULL || ferror(output_stream)) {
         if (ferror(output_stream)) {
@@ -735,6 +848,12 @@ void open_output_file() {
     }
 }
 
+/**
+ * @brief Print all registers.
+ *
+ * Print in both decimal and binary.
+ * @param stream Stream to print in.
+ */
 void dump_regs(FILE *stream) {
     for (int i = 0; i < 32; ++i) {
         fprintf(stream, "   S%02d || Decimal: % -11d || Binary:", i, reg[i]);
@@ -747,6 +866,14 @@ void dump_regs(FILE *stream) {
     fputc('\n', stream);
 }
 
+/**
+ * @brief Ask user Yes/No(/Cancel) question.
+ *
+ * @param cancel 1 If cancel choice is available.
+ * @return 1 If yes.
+ * @return 0 If no.
+ * @return -1 If cancel.
+ */
 int yes_no(int cancel) {
     int tmp, mode;
     while (1) {
@@ -772,6 +899,16 @@ int yes_no(int cancel) {
     return 0;
 }
 
+/**
+ * @brief Suggest correct form.
+ *
+ * May suggest correct form of instruction to user if error occurs.
+ * @param arg Array of arguments read from current line.
+ * @param arg_need_count How many arguments are needed.
+ * @param arg_need_type Type of each argument. 1:Imm / 0:Register number / 2:Any / -1:Empty
+ * @return 0 If user accepts suggestion.
+ * @note Can be turned off by user using #suggestion_status.
+ */
 int suggest(const int arg[], int arg_need_count, const int arg_need_type[]) {
     if (suggestion_status == 0)
         return 1;
