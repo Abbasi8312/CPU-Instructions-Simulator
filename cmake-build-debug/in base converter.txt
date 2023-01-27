@@ -1,0 +1,50 @@
+//File: Convert number from base x to base y and print each digit in a line (base = [2,10]).
+//Get number, base x, base y from input and convert number from base x to base 10.
+mov s4, 0
+input
+swp s1, s0                      //s1: Number
+input
+swp s2, s0                      //s2: Base x
+input
+swp s3, s0                      //s3: Base y
+mov s0, 0
+mov s11, s1
+mov s31 , 1
+mov s12, 10
+div s11, s12
+skie s11, s0
+jmp 20
+skie s12, s0
+jmp 20
+jmp 27
+mov s16, s12
+mov s17, s31
+mull s16, s17
+add s4, s4, s17                 //s4: Number in base 10
+mov s30, s2
+mull s30, s31
+jmp 13
+
+
+//Convert number from base 10 to base y.
+mov s30, 0
+mov s11, s4
+skie s11, s0
+jmp 35
+jmp 40
+mov s12, s3
+div s11, s12
+push s12
+addi s30, s30, 1
+jmp 32
+
+
+//Print result
+mov s5, 0
+skie s30, s5
+jmp 47
+jmp 51
+pop s0
+output
+subi s30, s30, 1
+jmp 44

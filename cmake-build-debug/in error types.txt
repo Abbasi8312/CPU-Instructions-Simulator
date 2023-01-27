@@ -1,0 +1,14 @@
+//All error types
+//Disable suggestions
+//Errors are saved in Errors.log (Not warnings!)
+move s1, s2
+mov 1, s222
+mov s1, 2, x
+        aDdI    S0   ,   S0 , 10000000000               //Space insensitive
+        oUtpUt
+pop s0
+jmp -2
+addi 2147483640, 100
+div s0, s31
+output a
+skie s30, s31

@@ -1,0 +1,36 @@
+//Checking all instructions
+mov s1, 2
+mov s2, 3
+add s10, s1, s2
+addi s11, s1, 100
+sub s12, s1, s2
+subi s13, s1, 100
+input
+swp s0, s14
+input
+swp s0, s15
+mov s16, s14
+mov s17, s15
+mull s14, s15
+div s16, s17
+and s18, s1, s2
+mov s24, 100
+andi s19, s1, 100
+or s20, s1, s2
+ori s21, s1, 100
+xor s22, s1, s2
+xori s23, s1, 100
+jmp 26
+mov 1000000 //Doesn't run
+output //Doesn't run
+skie s30, s31
+output //Doesn't run
+push s1
+push s2
+pop s0
+output
+pop s0
+output
+dump_regs
+dump_regs_f
+exit

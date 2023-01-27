@@ -1,0 +1,32 @@
+//File: Print first n prime numbers
+//Input: n
+
+
+input
+swp s0, s1                                     //S1 : Counter
+mov s31, 0                                     //S31: 0
+skie s1, s31
+jmp 11
+jmp 33
+mov s0, 2
+output                                         //Print 2 as first prime number
+
+mov s0, 3                                      //S0 : Numbers to check
+
+subi s1, s1, 1
+skie s1, s31
+jmp 20
+jmp 33
+output
+addi s0, s0, 2
+mov s2, 1
+addi s2, s2, 2
+skie s0, s2
+jmp 27
+jmp 16
+mov s21, s0
+mov s22, s2
+div s21, s22
+skie s22, s31
+jmp 23
+jmp 21
